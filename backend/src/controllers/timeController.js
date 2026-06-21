@@ -154,8 +154,10 @@ export async function recordTime(req, res) {
     await logAudit({ userId: req.user.id, action: 'time.record', resourceId: time.id, req });
 
     // Parsear route_gps para la respuesta
-    const parsed = JSON.parse(time.route_gps || '{}');
-    return res.status(201).json({
+      const parsed = typeof time.route_gps === 'string'
+        ? JSON.parse(time.route_gps || '{}')
+        : (time.route_gps || {});
+      return res.status(201).json({
       time: publicTime({
         ...time,
         splits:     parsed.splits ?? [],
@@ -210,7 +212,9 @@ export async function listMyTimes(req, res) {
     );
 
     const times = result.rows.map(row => {
-      const parsed = JSON.parse(row.route_gps || '{}');
+    const parsed = typeof updated.route_gps === 'string'
+      ? JSON.parse(updated.route_gps || '{}')
+      : (updated.route_gps || {});
       return publicTime({ ...row, splits: parsed.splits ?? [], track: parsed.track ?? [] });
     });
 
@@ -251,7 +255,9 @@ export async function getTime(req, res) {
       return res.status(403).json({ error: { message: 'No tienes acceso a este tiempo', status: 403 } });
     }
 
-    const parsed = JSON.parse(row.route_gps || '{}');
+    const parsed = typeof updated.route_gps === 'string'
+      ? JSON.parse(updated.route_gps || '{}')
+      : (updated.route_gps || {});
     return res.json({
       time: publicTime({ ...row, splits: parsed.splits ?? [], track: parsed.track ?? [] }),
     });
@@ -296,7 +302,9 @@ export async function listStageTimes(req, res) {
     );
 
     const times = result.rows.map(row => {
-      const parsed = JSON.parse(row.route_gps || '{}');
+    const parsed = typeof updated.route_gps === 'string'
+      ? JSON.parse(updated.route_gps || '{}')
+      : (updated.route_gps || {});
       return publicTime({ ...row, splits: parsed.splits ?? [], track: parsed.track ?? [] });
     });
 
@@ -420,7 +428,9 @@ export async function updateTimeVisibility(req, res) {
 
     await logAudit({ userId: req.user.id, action: 'time.visibility_update', resourceId: id, req });
 
-    const parsed = JSON.parse(updated.route_gps || '{}');
+    const parsed = typeof updated.route_gps === 'string'
+      ? JSON.parse(updated.route_gps || '{}')
+      : (updated.route_gps || {});
     return res.json({
       time: publicTime({ ...updated, splits: parsed.splits ?? [], track: parsed.track ?? [], pseudonym: null, stage_name: null }),
     });
