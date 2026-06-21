@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # PostgreSQL con PostGIS para datos geoespaciales
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: rally-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-rally_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-rally_pass_dev}
+      POSTGRES_DB: ${DB_NAME:-rally_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/src/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-rally_user} -d ${DB_NAME:-rally_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rally-network
+
+  # Redis para sesiones y Socket.io (escalabilidad futura)
+  redis:
+    image: redis:7-alpine
+    container_name: rally-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rally-network
+
+  # Backend Node.js + Express + Socket.io
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rally-backend
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-rally_user}
+      DB_PASSWORD: ${DB_PASSWORD:-rally_pass_dev}
+      DB_NAME: ${DB_NAME:-rally_db}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-dev_secret_key_change_in_production}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+    ports:
+      - "3000:3000"
+    volumes:
+      # Hot reload en desarrollo
+      - ./backend/src:/app/src
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - rally-network
+    command: npm run dev
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  rally-network:
+    driver: bridge
