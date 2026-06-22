@@ -123,7 +123,19 @@ CREATE TABLE audit_log (
   ip_address INET,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+-- Grupos que pueden ver un tramo
+CREATE TABLE stage_groups (
+  stage_id  UUID REFERENCES stages(id) ON DELETE CASCADE,
+  group_id  UUID REFERENCES groups(id) ON DELETE CASCADE,
+  PRIMARY KEY (stage_id, group_id)
+);
 
+-- Grupos que pueden ver un tiempo
+CREATE TABLE time_groups (
+  time_id   UUID REFERENCES times(id) ON DELETE CASCADE,
+  group_id  UUID REFERENCES groups(id) ON DELETE CASCADE,
+  PRIMARY KEY (time_id, group_id)
+);
 -- Índices para búsquedas frecuentes
 CREATE INDEX idx_times_user ON times(user_id, created_at DESC);
 CREATE INDEX idx_times_stage ON times(stage_id, duration_ms ASC);
