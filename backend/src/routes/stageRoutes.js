@@ -9,6 +9,7 @@ import {
   togglePublish,
 } from '../controllers/stageController.js';
 import { requireAuth, optionalAuth } from '../middleware/auth.js';
+import { assignStageGroups } from '../controllers/stageController.js';
 
 const router = Router();
 
@@ -22,5 +23,6 @@ router.get('/my/stages',      requireAuth, listMyStages);
 router.put('/:id',            requireAuth, updateStage);
 router.delete('/:id',         requireAuth, deleteStage);
 router.post('/:id/publish',   requireAuth, togglePublish);
+router.post('/:id/groups', requireAuth, assignStageGroups);
 
 export default router;

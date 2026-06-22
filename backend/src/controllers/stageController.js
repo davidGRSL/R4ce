@@ -34,7 +34,6 @@ async function logAudit({ userId, action, resourceId, req }) {
   }
 }
 
-// Convierte un GeoJSON LineString a WKT para PostGIS
 function geojsonLineToWKT(geojson) {
   if (!geojson || geojson.type !== 'LineString' || !Array.isArray(geojson.coordinates)) {
     return null;
@@ -55,23 +54,39 @@ export async function createStage(req, res) {
     visibility = 'private',
     difficultyLevel,
     estimatedDuration,
+    groupIds = [],
   } = req.body || {};
 
   if (!name || typeof name !== 'string' || name.trim().length === 0) {
     return res.status(400).json({ error: { message: 'name es obligatorio', status: 400 } });
   }
 
-  if (!['private', 'public'].includes(visibility)) {
-    return res.status(400).json({ error: { message: 'visibility debe ser private o public', status: 400 } });
+  if (!['private', 'public', 'group'].includes(visibility)) {
+    return res.status(400).json({ error: { message: 'visibility debe ser private, public o group', status: 400 } });
   }
 
   if (difficultyLevel !== undefined && (difficultyLevel < 1 || difficultyLevel > 5)) {
     return res.status(400).json({ error: { message: 'difficultyLevel debe estar entre 1 y 5', status: 400 } });
   }
 
+  if (visibility === 'group' && groupIds.length === 0) {
+    return res.status(400).json({ error: { message: 'Debes indicar al menos un grupo cuando visibility es group', status: 400 } });
+  }
+
   const routeLine = routeGeojson ? geojsonLineToWKT(routeGeojson) : null;
 
   try {
+    // Verificar membresía en grupos indicados
+    if (groupIds.length > 0) {
+      const memberCheck = await query(
+        `SELECT group_id FROM group_members WHERE user_id = $1 AND group_id = ANY($2::uuid[])`,
+        [req.user.id, groupIds]
+      );
+      if (memberCheck.rows.length !== groupIds.length) {
+        return res.status(403).json({ error: { message: 'Solo puedes asignar tramos a grupos de los que eres miembro', status: 403 } });
+      }
+    }
+
     const result = await query(
       `INSERT INTO stages
          (creator_id, name, description, route_geojson, route_line,
@@ -92,6 +107,16 @@ export async function createStage(req, res) {
     );
 
     const stage = result.rows[0];
+
+    // Asignar grupos si los hay
+    if (groupIds.length > 0) {
+      const values = groupIds.map((gid, i) => `($1, $${i + 2})`).join(', ');
+      await query(
+        `INSERT INTO stage_groups (stage_id, group_id) VALUES ${values}`,
+        [stage.id, ...groupIds]
+      );
+    }
+
     await logAudit({ userId: req.user.id, action: 'stage.create', resourceId: stage.id, req });
 
     return res.status(201).json({ stage: publicStage(stage) });
@@ -103,8 +128,6 @@ export async function createStage(req, res) {
 
 // ─────────────────────────────────────────────
 // GET /api/v1/stages
-// Tramos públicos y publicados. Soporta paginación y filtros opcionales.
-// Query params: page, limit, difficulty, search
 // ─────────────────────────────────────────────
 export async function listPublicStages(req, res) {
   const page       = Math.max(1, parseInt(req.query.page)  || 1);
@@ -131,10 +154,7 @@ export async function listPublicStages(req, res) {
 
     const where = conditions.join(' AND ');
 
-    const countResult = await query(
-      `SELECT COUNT(*) FROM stages s WHERE ${where}`,
-      params
-    );
+    const countResult = await query(`SELECT COUNT(*) FROM stages s WHERE ${where}`, params);
     const total = parseInt(countResult.rows[0].count);
 
     const result = await query(
@@ -158,8 +178,7 @@ export async function listPublicStages(req, res) {
 }
 
 // ─────────────────────────────────────────────
-// GET /api/v1/stages/my
-// Todos los tramos del usuario autenticado (públicos y privados).
+// GET /api/v1/stages/my/stages
 // ─────────────────────────────────────────────
 export async function listMyStages(req, res) {
   const page   = Math.max(1, parseInt(req.query.page)  || 1);
@@ -195,7 +214,6 @@ export async function listMyStages(req, res) {
 
 // ─────────────────────────────────────────────
 // GET /api/v1/stages/:id
-// Devuelve el tramo si es público, o si el usuario es el creador.
 // ─────────────────────────────────────────────
 export async function getStage(req, res) {
   const { id } = req.params;
@@ -210,15 +228,28 @@ export async function getStage(req, res) {
     );
 
     const stage = result.rows[0];
-
     if (!stage) {
       return res.status(404).json({ error: { message: 'Tramo no encontrado', status: 404 } });
     }
 
-    // Solo el creador puede ver sus tramos privados
     const isOwner = req.user?.id === stage.creator_id;
+
     if (stage.visibility === 'private' && !isOwner) {
       return res.status(403).json({ error: { message: 'No tienes acceso a este tramo', status: 403 } });
+    }
+
+    // Para tramos de grupo: verificar membresía
+    if (stage.visibility === 'group' && !isOwner) {
+      const memberCheck = await query(
+        `SELECT 1 FROM stage_groups sg
+         JOIN group_members gm ON gm.group_id = sg.group_id
+         WHERE sg.stage_id = $1 AND gm.user_id = $2
+         LIMIT 1`,
+        [id, req.user?.id]
+      );
+      if (memberCheck.rows.length === 0) {
+        return res.status(403).json({ error: { message: 'No tienes acceso a este tramo', status: 403 } });
+      }
     }
 
     return res.json({ stage: publicStage(stage) });
@@ -230,8 +261,6 @@ export async function getStage(req, res) {
 
 // ─────────────────────────────────────────────
 // PUT /api/v1/stages/:id
-// Solo el creador puede editar. No se puede editar un tramo publicado
-// sin despublicarlo antes (para evitar cambiar datos que ya tienen tiempos).
 // ─────────────────────────────────────────────
 export async function updateStage(req, res) {
   const { id } = req.params;
@@ -258,13 +287,11 @@ export async function updateStage(req, res) {
     }
 
     if (stage.is_published) {
-      return res.status(409).json({
-        error: { message: 'No puedes editar un tramo publicado. Despublícalo primero.', status: 409 },
-      });
+      return res.status(409).json({ error: { message: 'No puedes editar un tramo publicado. Despublícalo primero.', status: 409 } });
     }
 
-    if (visibility && !['private', 'public'].includes(visibility)) {
-      return res.status(400).json({ error: { message: 'visibility debe ser private o public', status: 400 } });
+    if (visibility && !['private', 'public', 'group'].includes(visibility)) {
+      return res.status(400).json({ error: { message: 'visibility debe ser private, public o group', status: 400 } });
     }
 
     if (difficultyLevel !== undefined && (difficultyLevel < 1 || difficultyLevel > 5)) {
@@ -310,7 +337,6 @@ export async function updateStage(req, res) {
 
 // ─────────────────────────────────────────────
 // DELETE /api/v1/stages/:id
-// Solo el creador puede borrar.
 // ─────────────────────────────────────────────
 export async function deleteStage(req, res) {
   const { id } = req.params;
@@ -339,8 +365,6 @@ export async function deleteStage(req, res) {
 
 // ─────────────────────────────────────────────
 // POST /api/v1/stages/:id/publish
-// Publica o despublica un tramo. Solo el creador.
-// body: { publish: true|false }
 // ─────────────────────────────────────────────
 export async function togglePublish(req, res) {
   const { id } = req.params;
@@ -362,17 +386,14 @@ export async function togglePublish(req, res) {
       return res.status(403).json({ error: { message: 'No tienes permiso', status: 403 } });
     }
 
-    // Para publicar se requiere al menos nombre y ruta GPS
     if (publish && !stage.route_geojson) {
-      return res.status(400).json({
-        error: { message: 'No puedes publicar un tramo sin ruta GPS', status: 400 },
-      });
+      return res.status(400).json({ error: { message: 'No puedes publicar un tramo sin ruta GPS', status: 400 } });
     }
 
     const result = await query(
       `UPDATE stages SET
          is_published = $2,
-         visibility   = CASE WHEN $2 = true THEN 'public' ELSE visibility END,
+         visibility   = CASE WHEN $2 = true AND visibility = 'private' THEN 'public' ELSE visibility END,
          updated_at   = NOW()
        WHERE id = $1
        RETURNING *`,
@@ -385,6 +406,57 @@ export async function togglePublish(req, res) {
     return res.json({ stage: publicStage(result.rows[0]) });
   } catch (err) {
     console.error('Error en togglePublish:', err);
+    return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
+  }
+}
+
+// ─────────────────────────────────────────────
+// POST /api/v1/stages/:id/groups
+// Asignar/sincronizar grupos a un tramo
+// body: { groupIds: string[] }
+// ─────────────────────────────────────────────
+export async function assignStageGroups(req, res) {
+  const { id } = req.params;
+  const { groupIds } = req.body || {};
+
+  if (!Array.isArray(groupIds)) {
+    return res.status(400).json({ error: { message: 'groupIds debe ser un array', status: 400 } });
+  }
+
+  try {
+    const existing = await query(`SELECT creator_id, visibility FROM stages WHERE id = $1`, [id]);
+    const stage = existing.rows[0];
+
+    if (!stage) {
+      return res.status(404).json({ error: { message: 'Tramo no encontrado', status: 404 } });
+    }
+
+    if (stage.creator_id !== req.user.id) {
+      return res.status(403).json({ error: { message: 'No tienes permiso', status: 403 } });
+    }
+
+    if (groupIds.length > 0) {
+      const memberCheck = await query(
+        `SELECT group_id FROM group_members WHERE user_id = $1 AND group_id = ANY($2::uuid[])`,
+        [req.user.id, groupIds]
+      );
+      if (memberCheck.rows.length !== groupIds.length) {
+        return res.status(403).json({ error: { message: 'Solo puedes asignar tramos a grupos de los que eres miembro', status: 403 } });
+      }
+    }
+
+    await query(`DELETE FROM stage_groups WHERE stage_id = $1`, [id]);
+
+    if (groupIds.length > 0) {
+      const values = groupIds.map((gid, i) => `($1, $${i + 2})`).join(', ');
+      await query(`INSERT INTO stage_groups (stage_id, group_id) VALUES ${values}`, [id, ...groupIds]);
+    }
+
+    await logAudit({ userId: req.user.id, action: 'stage.groups_update', resourceId: id, req });
+
+    return res.json({ stageId: id, groupIds });
+  } catch (err) {
+    console.error('Error en assignStageGroups:', err);
     return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
   }
 }

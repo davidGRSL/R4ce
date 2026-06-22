@@ -10,6 +10,7 @@ import { testConnection } from './db/pool.js';
 import authRoutes from './routes/authRoutes.js';
 import stageRoutes from './routes/stageRoutes.js';
 import timeRoutes from './routes/timeRoutes.js';
+import groupRoutes from './routes/groupRoutes.js';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -61,6 +62,7 @@ app.get('/health', (req, res) => {
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/stages', stageRoutes);
 app.use('/api/v1/times', timeRoutes);
+app.use('/api/v1/groups', groupRoutes);
 
 app.get('/api/v1/ping', (req, res) => {
   res.json({ message: 'pong', timestamp: new Date().toISOString() });
