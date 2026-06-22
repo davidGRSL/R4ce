@@ -33,7 +33,12 @@ async function logAudit({ userId, action, resourceId, req }) {
   }
 }
 
-// Actualiza o inserta el mejor tiempo del usuario en time_rankings
+function parseRouteGps(raw) {
+  if (!raw) return {};
+  if (typeof raw === 'string') return JSON.parse(raw);
+  return raw;
+}
+
 async function upsertRanking(userId, stageId, durationMs) {
   try {
     await query(
@@ -48,15 +53,12 @@ async function upsertRanking(userId, stageId, durationMs) {
          END`,
       [stageId, userId, durationMs]
     );
-
-    // Recalcular ranks del tramo
     await query(
       `UPDATE time_rankings tr
        SET rank = sub.rank
        FROM (
          SELECT id, RANK() OVER (PARTITION BY stage_id ORDER BY duration_ms ASC) AS rank
-         FROM time_rankings
-         WHERE stage_id = $1
+         FROM time_rankings WHERE stage_id = $1
        ) sub
        WHERE tr.id = sub.id`,
       [stageId]
@@ -68,29 +70,20 @@ async function upsertRanking(userId, stageId, durationMs) {
 
 // ─────────────────────────────────────────────
 // POST /api/v1/times
-// Registra un tiempo al terminar la carrera.
-// body: {
-//   stageId,
-//   durationMs,
-//   visibility,        // private | public | group
-//   splits: [{ checkpointIndex, ms }],
-//   track:  [{ lat, lng, ts }],
-//   maxSpeed?,
-//   avgSpeed?,
-// }
+// body: { stageId, durationMs, visibility, groupIds?, splits, track, maxSpeed?, avgSpeed? }
 // ─────────────────────────────────────────────
 export async function recordTime(req, res) {
   const {
     stageId,
     durationMs,
     visibility = 'private',
+    groupIds   = [],
     splits     = [],
     track      = [],
     maxSpeed,
     avgSpeed,
   } = req.body || {};
 
-  // Validaciones básicas
   if (!stageId || typeof stageId !== 'string') {
     return res.status(400).json({ error: { message: 'stageId es obligatorio', status: 400 } });
   }
@@ -103,68 +96,65 @@ export async function recordTime(req, res) {
     return res.status(400).json({ error: { message: 'visibility debe ser private, public o group', status: 400 } });
   }
 
+  if (visibility === 'group' && groupIds.length === 0) {
+    return res.status(400).json({ error: { message: 'Debes indicar al menos un grupo cuando visibility es group', status: 400 } });
+  }
+
   if (!Array.isArray(splits) || !Array.isArray(track)) {
     return res.status(400).json({ error: { message: 'splits y track deben ser arrays', status: 400 } });
   }
 
   try {
-    // Verificar que el tramo existe y es accesible
     const stageResult = await query(
-      `SELECT id, visibility, is_published FROM stages WHERE id = $1`,
+      `SELECT id, visibility, is_published, creator_id FROM stages WHERE id = $1`,
       [stageId]
     );
-
     const stage = stageResult.rows[0];
     if (!stage) {
       return res.status(404).json({ error: { message: 'Tramo no encontrado', status: 404 } });
     }
 
-    // Solo se pueden registrar tiempos en tramos publicados o propios
     if (!stage.is_published && stage.creator_id !== req.user.id) {
-      return res.status(403).json({
-        error: { message: 'No puedes registrar tiempos en un tramo no publicado', status: 403 },
-      });
+      return res.status(403).json({ error: { message: 'No puedes registrar tiempos en un tramo no publicado', status: 403 } });
+    }
+
+    // Verificar membresía en grupos
+    if (groupIds.length > 0) {
+      const memberCheck = await query(
+        `SELECT group_id FROM group_members WHERE user_id = $1 AND group_id = ANY($2::uuid[])`,
+        [req.user.id, groupIds]
+      );
+      if (memberCheck.rows.length !== groupIds.length) {
+        return res.status(403).json({ error: { message: 'Solo puedes compartir tiempos en grupos de los que eres miembro', status: 403 } });
+      }
     }
 
     const routeGps = JSON.stringify({ splits, track });
 
     const result = await query(
-      `INSERT INTO times
-         (user_id, stage_id, duration_ms, route_gps, max_speed, avg_speed, visibility)
+      `INSERT INTO times (user_id, stage_id, duration_ms, route_gps, max_speed, avg_speed, visibility)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [
-        req.user.id,
-        stageId,
-        durationMs,
-        routeGps,
-        maxSpeed ?? null,
-        avgSpeed ?? null,
-        visibility,
-      ]
+      [req.user.id, stageId, durationMs, routeGps, maxSpeed ?? null, avgSpeed ?? null, visibility]
     );
 
     const time = result.rows[0];
 
-    // Actualizar ranking solo si el tiempo es público
+    // Asignar grupos
+    if (groupIds.length > 0) {
+      const values = groupIds.map((gid, i) => `($1, $${i + 2})`).join(', ');
+      await query(`INSERT INTO time_groups (time_id, group_id) VALUES ${values}`, [time.id, ...groupIds]);
+    }
+
     if (visibility === 'public') {
       await upsertRanking(req.user.id, stageId, durationMs);
     }
 
     await logAudit({ userId: req.user.id, action: 'time.record', resourceId: time.id, req });
 
-    // Parsear route_gps para la respuesta
-      const parsed = typeof time.route_gps === 'string'
-        ? JSON.parse(time.route_gps || '{}')
-        : (time.route_gps || {});
-      return res.status(201).json({
-      time: publicTime({
-        ...time,
-        splits:     parsed.splits ?? [],
-        track:      parsed.track  ?? [],
-        pseudonym:  null,
-        stage_name: null,
-      }),
+    const parsed = parseRouteGps(time.route_gps);
+    return res.status(201).json({
+      time: publicTime({ ...time, splits: parsed.splits ?? [], track: parsed.track ?? [], pseudonym: null, stage_name: null }),
     });
   } catch (err) {
     console.error('Error en recordTime:', err);
@@ -174,7 +164,6 @@ export async function recordTime(req, res) {
 
 // ─────────────────────────────────────────────
 // GET /api/v1/times/my
-// Mis tiempos con paginación. Incluye nombre del tramo.
 // ─────────────────────────────────────────────
 export async function listMyTimes(req, res) {
   const page    = Math.max(1, parseInt(req.query.page)  || 1);
@@ -194,10 +183,7 @@ export async function listMyTimes(req, res) {
 
     const where = conditions.join(' AND ');
 
-    const countResult = await query(
-      `SELECT COUNT(*) FROM times t WHERE ${where}`,
-      params
-    );
+    const countResult = await query(`SELECT COUNT(*) FROM times t WHERE ${where}`, params);
     const total = parseInt(countResult.rows[0].count);
 
     const result = await query(
@@ -212,16 +198,11 @@ export async function listMyTimes(req, res) {
     );
 
     const times = result.rows.map(row => {
-    const parsed = typeof updated.route_gps === 'string'
-      ? JSON.parse(updated.route_gps || '{}')
-      : (updated.route_gps || {});
+      const parsed = parseRouteGps(row.route_gps);
       return publicTime({ ...row, splits: parsed.splits ?? [], track: parsed.track ?? [] });
     });
 
-    return res.json({
-      times,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
-    });
+    return res.json({ times, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
   } catch (err) {
     console.error('Error en listMyTimes:', err);
     return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
@@ -230,7 +211,6 @@ export async function listMyTimes(req, res) {
 
 // ─────────────────────────────────────────────
 // GET /api/v1/times/:id
-// Ver un tiempo concreto. Solo el dueño puede ver tiempos privados.
 // ─────────────────────────────────────────────
 export async function getTime(req, res) {
   const { id } = req.params;
@@ -255,12 +235,8 @@ export async function getTime(req, res) {
       return res.status(403).json({ error: { message: 'No tienes acceso a este tiempo', status: 403 } });
     }
 
-    const parsed = typeof updated.route_gps === 'string'
-      ? JSON.parse(updated.route_gps || '{}')
-      : (updated.route_gps || {});
-    return res.json({
-      time: publicTime({ ...row, splits: parsed.splits ?? [], track: parsed.track ?? [] }),
-    });
+    const parsed = parseRouteGps(row.route_gps);
+    return res.json({ time: publicTime({ ...row, splits: parsed.splits ?? [], track: parsed.track ?? [] }) });
   } catch (err) {
     console.error('Error en getTime:', err);
     return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
@@ -269,7 +245,6 @@ export async function getTime(req, res) {
 
 // ─────────────────────────────────────────────
 // GET /api/v1/times/stage/:stageId
-// Tiempos públicos de un tramo ordenados por duración (ranking informal).
 // ─────────────────────────────────────────────
 export async function listStageTimes(req, res) {
   const { stageId } = req.params;
@@ -278,7 +253,6 @@ export async function listStageTimes(req, res) {
   const offset = (page - 1) * limit;
 
   try {
-    // Verificar que el tramo existe
     const stageResult = await query(`SELECT id FROM stages WHERE id = $1`, [stageId]);
     if (!stageResult.rows[0]) {
       return res.status(404).json({ error: { message: 'Tramo no encontrado', status: 404 } });
@@ -302,16 +276,11 @@ export async function listStageTimes(req, res) {
     );
 
     const times = result.rows.map(row => {
-    const parsed = typeof updated.route_gps === 'string'
-      ? JSON.parse(updated.route_gps || '{}')
-      : (updated.route_gps || {});
+      const parsed = parseRouteGps(row.route_gps);
       return publicTime({ ...row, splits: parsed.splits ?? [], track: parsed.track ?? [] });
     });
 
-    return res.json({
-      times,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
-    });
+    return res.json({ times, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
   } catch (err) {
     console.error('Error en listStageTimes:', err);
     return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
@@ -320,7 +289,6 @@ export async function listStageTimes(req, res) {
 
 // ─────────────────────────────────────────────
 // GET /api/v1/times/stage/:stageId/ranking
-// Ranking oficial: mejor tiempo por usuario en ese tramo.
 // ─────────────────────────────────────────────
 export async function getStageRanking(req, res) {
   const { stageId } = req.params;
@@ -329,24 +297,17 @@ export async function getStageRanking(req, res) {
   const offset = (page - 1) * limit;
 
   try {
-    const stageResult = await query(
-      `SELECT id, name FROM stages WHERE id = $1`,
-      [stageId]
-    );
+    const stageResult = await query(`SELECT id, name FROM stages WHERE id = $1`, [stageId]);
     const stage = stageResult.rows[0];
     if (!stage) {
       return res.status(404).json({ error: { message: 'Tramo no encontrado', status: 404 } });
     }
 
-    const countResult = await query(
-      `SELECT COUNT(*) FROM time_rankings WHERE stage_id = $1`,
-      [stageId]
-    );
+    const countResult = await query(`SELECT COUNT(*) FROM time_rankings WHERE stage_id = $1`, [stageId]);
     const total = parseInt(countResult.rows[0].count);
 
     const result = await query(
-      `SELECT tr.rank, tr.duration_ms, tr.created_at,
-              u.id AS user_id, u.pseudonym
+      `SELECT tr.rank, tr.duration_ms, tr.created_at, u.id AS user_id, u.pseudonym
        FROM time_rankings tr
        LEFT JOIN users u ON u.id = tr.user_id
        WHERE tr.stage_id = $1
@@ -374,15 +335,18 @@ export async function getStageRanking(req, res) {
 
 // ─────────────────────────────────────────────
 // PATCH /api/v1/times/:id/visibility
-// Cambiar visibilidad de un tiempo ya registrado.
-// body: { visibility: 'private' | 'public' | 'group' }
+// body: { visibility, groupIds? }
 // ─────────────────────────────────────────────
 export async function updateTimeVisibility(req, res) {
   const { id } = req.params;
-  const { visibility } = req.body || {};
+  const { visibility, groupIds = [] } = req.body || {};
 
   if (!['private', 'public', 'group'].includes(visibility)) {
     return res.status(400).json({ error: { message: 'visibility debe ser private, public o group', status: 400 } });
+  }
+
+  if (visibility === 'group' && groupIds.length === 0) {
+    return res.status(400).json({ error: { message: 'Debes indicar al menos un grupo cuando visibility es group', status: 400 } });
   }
 
   try {
@@ -401,26 +365,24 @@ export async function updateTimeVisibility(req, res) {
       `UPDATE times SET visibility = $2 WHERE id = $1 RETURNING *`,
       [id, visibility]
     );
-
     const updated = result.rows[0];
 
-    // Si pasa a público, upsert ranking; si pasa a privado, eliminar del ranking
+    // Sincronizar grupos
+    await query(`DELETE FROM time_groups WHERE time_id = $1`, [id]);
+    if (groupIds.length > 0) {
+      const values = groupIds.map((gid, i) => `($1, $${i + 2})`).join(', ');
+      await query(`INSERT INTO time_groups (time_id, group_id) VALUES ${values}`, [id, ...groupIds]);
+    }
+
+    // Ranking
     if (visibility === 'public') {
       await upsertRanking(req.user.id, updated.stage_id, updated.duration_ms);
     } else if (time.visibility === 'public' && visibility !== 'public') {
-      // Era público y deja de serlo: eliminar del ranking
+      await query(`DELETE FROM time_rankings WHERE user_id = $1 AND stage_id = $2`, [req.user.id, updated.stage_id]);
       await query(
-        `DELETE FROM time_rankings WHERE user_id = $1 AND stage_id = $2`,
-        [req.user.id, updated.stage_id]
-      );
-      // Recalcular ranks del tramo
-      await query(
-        `UPDATE time_rankings tr
-         SET rank = sub.rank
-         FROM (
-           SELECT id, RANK() OVER (PARTITION BY stage_id ORDER BY duration_ms ASC) AS rank
-           FROM time_rankings WHERE stage_id = $1
-         ) sub
+        `UPDATE time_rankings tr SET rank = sub.rank
+         FROM (SELECT id, RANK() OVER (PARTITION BY stage_id ORDER BY duration_ms ASC) AS rank
+               FROM time_rankings WHERE stage_id = $1) sub
          WHERE tr.id = sub.id`,
         [updated.stage_id]
       );
@@ -428,9 +390,7 @@ export async function updateTimeVisibility(req, res) {
 
     await logAudit({ userId: req.user.id, action: 'time.visibility_update', resourceId: id, req });
 
-    const parsed = typeof updated.route_gps === 'string'
-      ? JSON.parse(updated.route_gps || '{}')
-      : (updated.route_gps || {});
+    const parsed = parseRouteGps(updated.route_gps);
     return res.json({
       time: publicTime({ ...updated, splits: parsed.splits ?? [], track: parsed.track ?? [], pseudonym: null, stage_name: null }),
     });
@@ -441,8 +401,59 @@ export async function updateTimeVisibility(req, res) {
 }
 
 // ─────────────────────────────────────────────
+// POST /api/v1/times/:id/groups
+// Asignar/sincronizar grupos a un tiempo
+// body: { groupIds: string[] }
+// ─────────────────────────────────────────────
+export async function assignTimeGroups(req, res) {
+  const { id } = req.params;
+  const { groupIds } = req.body || {};
+
+  if (!Array.isArray(groupIds)) {
+    return res.status(400).json({ error: { message: 'groupIds debe ser un array', status: 400 } });
+  }
+
+  try {
+    const existing = await query(`SELECT user_id, visibility FROM times WHERE id = $1`, [id]);
+    const time = existing.rows[0];
+
+    if (!time) {
+      return res.status(404).json({ error: { message: 'Tiempo no encontrado', status: 404 } });
+    }
+
+    if (time.user_id !== req.user.id) {
+      return res.status(403).json({ error: { message: 'No tienes permiso', status: 403 } });
+    }
+
+    if (groupIds.length > 0) {
+      const memberCheck = await query(
+        `SELECT group_id FROM group_members WHERE user_id = $1 AND group_id = ANY($2::uuid[])`,
+        [req.user.id, groupIds]
+      );
+      if (memberCheck.rows.length !== groupIds.length) {
+        return res.status(403).json({ error: { message: 'Solo puedes compartir tiempos en grupos de los que eres miembro', status: 403 } });
+      }
+    }
+
+    await query(`DELETE FROM time_groups WHERE time_id = $1`, [id]);
+
+    if (groupIds.length > 0) {
+      const values = groupIds.map((gid, i) => `($1, $${i + 2})`).join(', ');
+      await query(`INSERT INTO time_groups (time_id, group_id) VALUES ${values}`, [id, ...groupIds]);
+      await query(`UPDATE times SET visibility = 'group' WHERE id = $1`, [id]);
+    }
+
+    await logAudit({ userId: req.user.id, action: 'time.groups_update', resourceId: id, req });
+
+    return res.json({ timeId: id, groupIds });
+  } catch (err) {
+    console.error('Error en assignTimeGroups:', err);
+    return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
+  }
+}
+
+// ─────────────────────────────────────────────
 // DELETE /api/v1/times/:id
-// Solo el dueño puede borrar su tiempo.
 // ─────────────────────────────────────────────
 export async function deleteTime(req, res) {
   const { id } = req.params;
@@ -461,12 +472,8 @@ export async function deleteTime(req, res) {
 
     await query(`DELETE FROM times WHERE id = $1`, [id]);
 
-    // Si era público, limpiar ranking
     if (time.visibility === 'public') {
-      await query(
-        `DELETE FROM time_rankings WHERE user_id = $1 AND stage_id = $2`,
-        [req.user.id, time.stage_id]
-      );
+      await query(`DELETE FROM time_rankings WHERE user_id = $1 AND stage_id = $2`, [req.user.id, time.stage_id]);
     }
 
     await logAudit({ userId: req.user.id, action: 'time.delete', resourceId: id, req });
