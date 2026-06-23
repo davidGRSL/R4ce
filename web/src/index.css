@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    @apply bg-paper text-ink font-sans;
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(10, 10, 10, 0.04) 1px, transparent 0);
+    background-size: 24px 24px;
+  }
+  h1, h2, h3, h4 {
+    @apply font-display tracking-tight;
+  }
+}
+
+@layer components {
+  .stage-card {
+    @apply bg-paper border border-ink/10 rounded-none p-6 transition-all hover:border-ink/30;
+  }
+  .btn {
+    @apply inline-flex items-center gap-2 px-4 py-2 font-medium text-sm
+           border border-ink bg-ink text-paper
+           transition-colors hover:bg-paper hover:text-ink
+           focus:outline-none focus:ring-2 focus:ring-rally focus:ring-offset-2;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-4 py-2 font-medium text-sm
+           border border-ink/20 bg-transparent text-ink
+           transition-colors hover:border-ink
+           focus:outline-none focus:ring-2 focus:ring-rally focus:ring-offset-2;
+  }
+  .input {
+    @apply w-full px-3 py-2 bg-paper border border-ink/20
+           font-mono text-sm text-ink
+           focus:outline-none focus:border-ink transition-colors;
+  }
+  .label {
+    @apply block text-xs font-mono uppercase tracking-widest text-ink/60 mb-1;
+  }
+  .eyebrow {
+    @apply text-xs font-mono uppercase tracking-[0.2em] text-ink/50;
+  }
+}
+
+/* Leaflet container */
+.leaflet-container {
+  background: #1a1a1a;
+  font-family: 'JetBrains Mono', monospace;
+}
