@@ -1,5 +1,5 @@
 import { NavLink, useNavigate, Outlet } from 'react-router-dom';
-import { LogOut, LayoutGrid, Trophy, Clock } from 'lucide-react';
+import { LogOut, LayoutGrid, Trophy, Clock, Route as RouteIcon } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { clearTokens, getRefreshToken, getUser } from '../lib/auth.js';
 
@@ -17,6 +17,7 @@ export default function Layout() {
 
   const navItems = [
     { to: '/',         label: 'Dashboard', icon: LayoutGrid },
+    { to: '/stages',   label: 'Tramos',    icon: RouteIcon },
     { to: '/rankings', label: 'Rankings',  icon: Trophy },
     { to: '/times',    label: 'Tiempos',   icon: Clock },
   ];

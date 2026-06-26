@@ -460,3 +460,98 @@ export async function assignStageGroups(req, res) {
     return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
   }
 }
+// ─────────────────────────────────────────────
+// PATCH para stageController.js
+// Añadir al final del archivo — endpoints de favoritos
+// ─────────────────────────────────────────────
+
+// POST /api/v1/stages/:id/favorite
+export async function addFavorite(req, res) {
+  const { id } = req.params;
+
+  try {
+    const stageResult = await query(`SELECT id, visibility, creator_id FROM stages WHERE id = $1`, [id]);
+    const stage = stageResult.rows[0];
+
+    if (!stage) {
+      return res.status(404).json({ error: { message: 'Tramo no encontrado', status: 404 } });
+    }
+
+    // Verificar acceso: público, propio, o de un grupo del que es miembro
+    const isOwner = stage.creator_id === req.user.id;
+    if (stage.visibility === 'private' && !isOwner) {
+      return res.status(403).json({ error: { message: 'No tienes acceso a este tramo', status: 403 } });
+    }
+    if (stage.visibility === 'group' && !isOwner) {
+      const memberCheck = await query(
+        `SELECT 1 FROM stage_groups sg
+         JOIN group_members gm ON gm.group_id = sg.group_id
+         WHERE sg.stage_id = $1 AND gm.user_id = $2 LIMIT 1`,
+        [id, req.user.id]
+      );
+      if (memberCheck.rows.length === 0) {
+        return res.status(403).json({ error: { message: 'No tienes acceso a este tramo', status: 403 } });
+      }
+    }
+
+    await query(
+      `INSERT INTO favorites (user_id, stage_id) VALUES ($1, $2)
+       ON CONFLICT (user_id, stage_id) DO NOTHING`,
+      [req.user.id, id]
+    );
+
+    return res.status(201).json({ favorited: true, stageId: id });
+  } catch (err) {
+    console.error('Error en addFavorite:', err);
+    return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
+  }
+}
+
+// DELETE /api/v1/stages/:id/favorite
+export async function removeFavorite(req, res) {
+  const { id } = req.params;
+
+  try {
+    await query(`DELETE FROM favorites WHERE user_id = $1 AND stage_id = $2`, [req.user.id, id]);
+    return res.status(204).send();
+  } catch (err) {
+    console.error('Error en removeFavorite:', err);
+    return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
+  }
+}
+
+// GET /api/v1/stages/favorites/list
+export async function listFavorites(req, res) {
+  try {
+    const result = await query(
+      `SELECT s.*, u.pseudonym, f.created_at AS favorited_at
+       FROM favorites f
+       JOIN stages s ON s.id = f.stage_id
+       LEFT JOIN users u ON u.id = s.creator_id
+       WHERE f.user_id = $1
+       ORDER BY f.created_at DESC`,
+      [req.user.id]
+    );
+
+    return res.json({
+      stages: result.rows.map(row => ({
+        id:                row.id,
+        name:              row.name,
+        description:       row.description,
+        routeGeojson:      row.route_geojson,
+        silhouetteSvg:     row.silhouette_svg,
+        visibility:        row.visibility,
+        difficultyLevel:   row.difficulty_level,
+        estimatedDuration: row.estimated_duration,
+        isPublished:       row.is_published,
+        creatorId:         row.creator_id,
+        creatorPseudonym:  row.pseudonym ?? null,
+        createdAt:         row.created_at,
+        favoritedAt:       row.favorited_at,
+      })),
+    });
+  } catch (err) {
+    console.error('Error en listFavorites:', err);
+    return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
+  }
+}

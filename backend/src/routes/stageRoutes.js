@@ -8,18 +8,27 @@ import {
   deleteStage,
   togglePublish,
   assignStageGroups,
+  addFavorite,
+  removeFavorite,
+  listFavorites,
 } from '../controllers/stageController.js';
 import { requireAuth, optionalAuth } from '../middleware/auth.js';
 
 const router = Router();
 
-router.get('/',             optionalAuth, listPublicStages);
-router.post('/',            requireAuth,  createStage);
-router.get('/my/stages',    requireAuth,  listMyStages);
-router.get('/:id',          optionalAuth, getStage);
-router.put('/:id',          requireAuth,  updateStage);
-router.delete('/:id',       requireAuth,  deleteStage);
-router.post('/:id/publish', requireAuth,  togglePublish);
-router.post('/:id/groups',  requireAuth,  assignStageGroups);
+// Listados específicos ANTES de /:id para que no los capture
+router.get('/',                  optionalAuth, listPublicStages);
+router.post('/',                 requireAuth,  createStage);
+router.get('/my/stages',         requireAuth,  listMyStages);
+router.get('/favorites/list',    requireAuth,  listFavorites);
+
+// Operaciones sobre un tramo concreto
+router.get('/:id',               optionalAuth, getStage);
+router.put('/:id',               requireAuth,  updateStage);
+router.delete('/:id',            requireAuth,  deleteStage);
+router.post('/:id/publish',      requireAuth,  togglePublish);
+router.post('/:id/groups',       requireAuth,  assignStageGroups);
+router.post('/:id/favorite',     requireAuth,  addFavorite);
+router.delete('/:id/favorite',   requireAuth,  removeFavorite);
 
 export default router;
