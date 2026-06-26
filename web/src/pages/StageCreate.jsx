@@ -5,7 +5,6 @@ import { api } from '../lib/api.js';
 import { reverseGeocode } from '../lib/geocode.js';
 import MapPicker from "../components/MapPicker.jsx";
 import PlaceSearch from "../components/PlaceSearch.jsx";
-import MyStagesPanel from "../components/MyStagesPanel.jsx";
 
 const EMPTY = {
   name: '',
@@ -372,12 +371,7 @@ export default function StageCreate() {
         </aside>
       </form>
 
-      {/* Panel "Mis tramos" (solo en modo creación) */}
-      {!editing && (
-        <div className="mt-16 pt-12 border-t border-ink/10">
-          <MyStagesPanel />
-        </div>
-      )}
+
     </div>
   );
 }

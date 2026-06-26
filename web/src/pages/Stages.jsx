@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus, Star, MapPin, Gauge } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { formatDuration } from '../lib/format.js';
+import MyStagesPanel from '../components/MyStagesPanel.jsx';
 
 export default function Stages() {
   const [favorites, setFavorites] = useState([]);
@@ -30,14 +31,47 @@ export default function Stages() {
 
   return (
     <div className="p-8 lg:p-12 max-w-6xl">
-      <header className="mb-10">
-        <p className="eyebrow">Circuitos</p>
-        <h1 className="text-5xl font-bold mt-1">Tramos</h1>
-        <p className="text-ink/60 mt-3 max-w-lg">
-          Tus tramos favoritos y tu taller de creación. Marca como favorito
-          cualquier tramo público, de grupo o propio para tenerlo a mano.
-        </p>
-      </header>
+      {/* Header + Crea tu circuito lado a lado */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8 items-stretch">
+        {/* Izquierda: header */}
+        <header className="flex flex-col justify-center">
+          <p className="eyebrow">Circuitos</p>
+          <h1 className="text-4xl font-bold mt-1">Tramos</h1>
+          <p className="text-ink/60 mt-2 text-sm max-w-lg">
+            Tus tramos favoritos y tu taller de creación. Marca como favorito
+            cualquier tramo público, de grupo o propio para tenerlo a mano.
+          </p>
+        </header>
+
+        {/* Derecha: crea tu circuito */}
+        <Link
+          to="/stages/create"
+          className="group flex flex-col justify-center border-2 border-ink bg-ink text-paper px-8 py-6 relative overflow-hidden
+                     transition-all hover:bg-paper hover:text-ink"
+        >
+          <svg className="absolute right-0 top-0 h-full w-1/2 opacity-10 pointer-events-none"
+               viewBox="0 0 200 200" fill="none">
+            <path d="M0,180 Q60,160 80,100 T140,40 Q160,20 200,30"
+                  stroke="currentColor" strokeWidth="2" fill="none" />
+            <circle cx="0" cy="180" r="4" fill="currentColor" />
+            <circle cx="200" cy="30" r="4" fill="currentColor" />
+          </svg>
+
+          <div className="relative">
+            <div className="flex items-center gap-2 mb-1.5">
+              <Plus size={16} strokeWidth={2.5} />
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em]">Taller de trazadas</p>
+            </div>
+            <h2 className="font-display text-2xl font-bold">
+              Crea tu circuito
+            </h2>
+            <span className="inline-flex items-center gap-2 mt-3 font-medium text-sm border-b-2 border-current pb-0.5">
+              Empezar a crear
+              <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
+            </span>
+          </div>
+        </Link>
+      </div>
 
       {/* Carrusel de favoritos */}
       <section className="mb-12">
@@ -84,41 +118,10 @@ export default function Stages() {
         )}
       </section>
 
-      {/* Crea tu circuito */}
-      <section>
-        <Link
-          to="/stages/create"
-          className="group block border-2 border-ink bg-ink text-paper p-10 relative overflow-hidden
-                     transition-all hover:bg-paper hover:text-ink"
-        >
-          {/* Líneas de trazado decorativas */}
-          <svg className="absolute right-0 top-0 h-full w-1/2 opacity-10 pointer-events-none"
-               viewBox="0 0 200 200" fill="none">
-            <path d="M0,180 Q60,160 80,100 T140,40 Q160,20 200,30"
-                  stroke="currentColor" strokeWidth="2" fill="none" />
-            <circle cx="0" cy="180" r="4" fill="currentColor" />
-            <circle cx="200" cy="30" r="4" fill="currentColor" />
-          </svg>
-
-          <div className="relative">
-            <div className="flex items-center gap-2 mb-3">
-              <Plus size={20} strokeWidth={2.5} />
-              <p className="font-mono text-xs uppercase tracking-[0.2em]">Taller de trazadas</p>
-            </div>
-            <h2 className="font-display text-4xl font-bold max-w-md">
-              Crea tu circuito
-            </h2>
-            <p className="mt-3 max-w-sm opacity-70">
-              Define inicio, meta y puntos de referencia. Dibuja la trazada sobre
-              el mapa y publícala para tu grupo o para todos.
-            </p>
-            <span className="inline-flex items-center gap-2 mt-6 font-medium text-sm border-b-2 border-current pb-0.5">
-              Empezar a crear
-              <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
-            </span>
-          </div>
-        </Link>
-      </section>
+      {/* Mis tramos */}
+      <div className="mt-12 pt-12 border-t border-ink/10">
+        <MyStagesPanel />
+      </div>
     </div>
   );
 }
@@ -151,11 +154,11 @@ function FavoriteCard({ stage }) {
       )}
 
       <div className="flex items-center gap-4 mt-4 pt-4 border-t border-ink/10">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <Gauge size={13} className="text-ink/40" />
           <span className="font-mono text-xs">Nv. {stage.difficultyLevel || '—'}</span>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <MapPin size={13} className="text-ink/40" />
           <span className="font-mono text-xs">
             {stage.estimatedDuration ? formatDuration(stage.estimatedDuration * 1000) : '—'}
