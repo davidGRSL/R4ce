@@ -92,19 +92,9 @@ export default function Dashboard() {
 
       {/* Recent times */}
       <section>
-        <div className="flex items-baseline justify-between mb-6">
-          <div>
-            <p className="eyebrow">Actividad reciente</p>
-            <h2 className="text-2xl font-bold mt-1">Últimos tiempos</h2>
-          </div>
-          <Link
-            to="/times"
-            className="text-sm font-mono uppercase tracking-widest text-ink/60 hover:text-rally
-                       inline-flex items-center gap-1 transition-colors"
-          >
-            Ver todos
-            <ArrowUpRight size={14} />
-          </Link>
+        <div className="mb-6">
+          <p className="eyebrow">Actividad reciente</p>
+          <h2 className="text-2xl font-bold mt-1">Últimos tiempos</h2>
         </div>
 
         {loading ? (

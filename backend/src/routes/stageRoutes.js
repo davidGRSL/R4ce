@@ -11,6 +11,7 @@ import {
   addFavorite,
   removeFavorite,
   listFavorites,
+  getStageDetail,
 } from '../controllers/stageController.js';
 import { requireAuth, optionalAuth } from '../middleware/auth.js';
 
@@ -30,5 +31,6 @@ router.post('/:id/publish',      requireAuth,  togglePublish);
 router.post('/:id/groups',       requireAuth,  assignStageGroups);
 router.post('/:id/favorite',     requireAuth,  addFavorite);
 router.delete('/:id/favorite',   requireAuth,  removeFavorite);
+router.get('/:id/detail', optionalAuth, getStageDetail);
 
 export default router;

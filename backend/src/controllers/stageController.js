@@ -179,6 +179,7 @@ export async function listPublicStages(req, res) {
 
 // ─────────────────────────────────────────────
 // GET /api/v1/stages/my/stages
+// Incluye myBestTimeMs: mejor tiempo del usuario en cada tramo (o null)
 // ─────────────────────────────────────────────
 export async function listMyStages(req, res) {
   const page   = Math.max(1, parseInt(req.query.page)  || 1);
@@ -193,9 +194,16 @@ export async function listMyStages(req, res) {
     const total = parseInt(countResult.rows[0].count);
 
     const result = await query(
-      `SELECT s.*, u.pseudonym
+      `SELECT s.*, u.pseudonym,
+              bt.best_ms AS my_best_time_ms
        FROM stages s
        LEFT JOIN users u ON u.id = s.creator_id
+       LEFT JOIN (
+         SELECT stage_id, MIN(duration_ms) AS best_ms
+         FROM times
+         WHERE user_id = $1
+         GROUP BY stage_id
+       ) bt ON bt.stage_id = s.id
        WHERE s.creator_id = $1
        ORDER BY s.created_at DESC
        LIMIT $2 OFFSET $3`,
@@ -203,7 +211,10 @@ export async function listMyStages(req, res) {
     );
 
     return res.json({
-      stages: result.rows.map(publicStage),
+      stages: result.rows.map(row => ({
+        ...publicStage(row),
+        myBestTimeMs: row.my_best_time_ms ?? null,
+      })),
       pagination: { page, limit, total, pages: Math.ceil(total / limit) },
     });
   } catch (err) {
@@ -211,7 +222,6 @@ export async function listMyStages(req, res) {
     return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
   }
 }
-
 // ─────────────────────────────────────────────
 // GET /api/v1/stages/:id
 // ─────────────────────────────────────────────
@@ -552,6 +562,119 @@ export async function listFavorites(req, res) {
     });
   } catch (err) {
     console.error('Error en listFavorites:', err);
+    return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
+  }
+}
+// GET /api/v1/stages/:id/detail
+// Devuelve TODA la info del tramo: datos, creador, mi mejor tiempo
+// con sus splits, y el ranking completo del tramo.
+// ─────────────────────────────────────────────
+export async function getStageDetail(req, res) {
+  const { id } = req.params;
+
+  try {
+    // 1. Datos del tramo + creador
+    const stageResult = await query(
+      `SELECT s.*, u.pseudonym AS creator_pseudonym, u.username AS creator_username
+       FROM stages s
+       LEFT JOIN users u ON u.id = s.creator_id
+       WHERE s.id = $1`,
+      [id]
+    );
+
+    const stage = stageResult.rows[0];
+    if (!stage) {
+      return res.status(404).json({ error: { message: 'Tramo no encontrado', status: 404 } });
+    }
+
+    // Verificar acceso
+    const isOwner = req.user?.id === stage.creator_id;
+    if (stage.visibility === 'private' && !isOwner) {
+      return res.status(403).json({ error: { message: 'No tienes acceso a este tramo', status: 403 } });
+    }
+    if (stage.visibility === 'group' && !isOwner) {
+      const memberCheck = await query(
+        `SELECT 1 FROM stage_groups sg
+         JOIN group_members gm ON gm.group_id = sg.group_id
+         WHERE sg.stage_id = $1 AND gm.user_id = $2 LIMIT 1`,
+        [id, req.user?.id]
+      );
+      if (memberCheck.rows.length === 0) {
+        return res.status(403).json({ error: { message: 'No tienes acceso a este tramo', status: 403 } });
+      }
+    }
+
+    // 2. Mi mejor tiempo en este tramo (con splits y track)
+    let myBest = null;
+    if (req.user?.id) {
+      const myBestResult = await query(
+        `SELECT id, duration_ms, route_gps, max_speed, avg_speed, visibility, created_at
+         FROM times
+         WHERE user_id = $1 AND stage_id = $2
+         ORDER BY duration_ms ASC
+         LIMIT 1`,
+        [req.user.id, id]
+      );
+      if (myBestResult.rows[0]) {
+        const row = myBestResult.rows[0];
+        const parsed = typeof row.route_gps === 'string'
+          ? JSON.parse(row.route_gps || '{}')
+          : (row.route_gps || {});
+        myBest = {
+          id:         row.id,
+          durationMs: row.duration_ms,
+          maxSpeed:   row.max_speed,
+          avgSpeed:   row.avg_speed,
+          visibility: row.visibility,
+          createdAt:  row.created_at,
+          splits:     parsed.splits ?? [],
+          track:      parsed.track ?? [],
+        };
+      }
+    }
+
+    // 3. Ranking del tramo (mejor tiempo público por usuario)
+    const rankingResult = await query(
+      `SELECT tr.rank, tr.duration_ms, tr.created_at, u.id AS user_id, u.pseudonym
+       FROM time_rankings tr
+       LEFT JOIN users u ON u.id = tr.user_id
+       WHERE tr.stage_id = $1
+       ORDER BY tr.rank ASC
+       LIMIT 50`,
+      [id]
+    );
+
+    // Extraer checkpoints del routeGeojson
+    const props = stage.route_geojson?.properties || {};
+
+    return res.json({
+      stage: {
+        id:                stage.id,
+        name:              stage.name,
+        description:       stage.description,
+        routeGeojson:      stage.route_geojson,
+        visibility:        stage.visibility,
+        difficultyLevel:   stage.difficulty_level,
+        estimatedDuration: stage.estimated_duration,
+        isPublished:       stage.is_published,
+        creatorId:         stage.creator_id,
+        creatorPseudonym:  stage.creator_pseudonym ?? stage.creator_username ?? 'Anónimo',
+        createdAt:         stage.created_at,
+        start:             props.start ?? null,
+        end:               props.end ?? null,
+        checkpoints:       props.checkpoints ?? [],
+      },
+      myBest,
+      ranking: rankingResult.rows.map(row => ({
+        rank:       row.rank,
+        userId:     row.user_id,
+        pseudonym:  row.pseudonym ?? 'Anónimo',
+        durationMs: row.duration_ms,
+        createdAt:  row.created_at,
+      })),
+    });
+  } catch (err) {
+    console.error('Error en getStageDetail:', err);
     return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
   }
 }

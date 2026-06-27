@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronDown, Pencil, Trash2, AlertTriangle, List } from 'lucide-react';
+import { ChevronDown, Pencil, Trash2, AlertTriangle, List, Eye, Clock } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { formatDate } from '../lib/format.js';
+import { formatDate, formatDuration } from '../lib/format.js';
 
 export default function MyStagesPanel() {
   const navigate = useNavigate();
@@ -71,7 +71,13 @@ export default function MyStagesPanel() {
           ) : (
             <ul className="divide-y divide-ink/10">
               {stages.map((s) => (
-                <StageRow key={s.id} stage={s} onEdit={() => navigate(`/stages/${s.id}/edit`)} onDeleted={onDeleted} />
+                <StageRow
+                  key={s.id}
+                  stage={s}
+                  onView={() => navigate(`/stages/${s.id}`)}
+                  onEdit={() => navigate(`/stages/${s.id}/edit`)}
+                  onDeleted={onDeleted}
+                />
               ))}
             </ul>
           )}
@@ -81,8 +87,7 @@ export default function MyStagesPanel() {
   );
 }
 
-function StageRow({ stage, onEdit, onDeleted }) {
-  // Estados de confirmación: 0 = normal, 1 = primer aviso, 2 = aviso final
+function StageRow({ stage, onView, onEdit, onDeleted }) {
   const [confirmStep, setConfirmStep] = useState(0);
   const [deleting,    setDeleting]    = useState(false);
   const [typed,       setTyped]       = useState('');
@@ -108,7 +113,7 @@ function StageRow({ stage, onEdit, onDeleted }) {
   return (
     <li className="p-4">
       <div className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h3 className="font-medium truncate">{stage.name}</h3>
             <span className={`px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest border shrink-0 ${visStyles[stage.visibility]}`}>
@@ -120,13 +125,29 @@ function StageRow({ stage, onEdit, onDeleted }) {
               </span>
             )}
           </div>
-          <p className="text-xs font-mono text-ink/40 mt-1">
+
+          {/* Tu tiempo en este tramo */}
+          <div className="flex items-center gap-2 mt-2">
+            <Clock size={13} className="text-ink/40 shrink-0" />
+            {stage.myBestTimeMs != null ? (
+              <span className="font-mono text-sm font-medium">{formatDuration(stage.myBestTimeMs)}</span>
+            ) : (
+              <span className="font-mono text-xs text-rally uppercase tracking-widest">
+                Acércate y ponte al límite
+              </span>
+            )}
+          </div>
+
+          <p className="text-xs font-mono text-ink/40 mt-1.5">
             Nv. {stage.difficultyLevel || '—'} · {formatDate(stage.createdAt)}
           </p>
         </div>
 
         {confirmStep === 0 && (
           <div className="flex gap-2 shrink-0">
+            <button onClick={onView} className="btn-ghost text-xs py-1.5" title="Ver toda la información">
+              <Eye size={13} /> Ver
+            </button>
             <button onClick={onEdit} className="btn-ghost text-xs py-1.5">
               <Pencil size={13} /> Editar
             </button>
@@ -140,7 +161,7 @@ function StageRow({ stage, onEdit, onDeleted }) {
         )}
       </div>
 
-      {/* Paso 1: primer aviso */}
+      {/* Paso 1 */}
       {confirmStep === 1 && (
         <div className="mt-4 border border-rally/40 bg-rally/5 p-4">
           <div className="flex items-start gap-2 mb-3">
@@ -164,7 +185,7 @@ function StageRow({ stage, onEdit, onDeleted }) {
         </div>
       )}
 
-      {/* Paso 2: confirmación final escribiendo el nombre */}
+      {/* Paso 2 */}
       {confirmStep === 2 && (
         <div className="mt-4 border border-rally bg-rally/5 p-4">
           <div className="flex items-start gap-2 mb-3">
