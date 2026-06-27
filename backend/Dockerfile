@@ -5,6 +5,7 @@ FROM node:20-alpine
 # si no hay binario precompilado para musl (Alpine), npm lo compila con node-gyp.
 RUN apk add --no-cache python3 make g++
 
+RUN apk add --no-cache vips-dev
 WORKDIR /app
 
 # Copiamos primero solo los manifiestos para aprovechar la cache de capas de Docker:

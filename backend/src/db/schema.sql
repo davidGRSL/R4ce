@@ -136,6 +136,34 @@ CREATE TABLE time_groups (
   group_id  UUID REFERENCES groups(id) ON DELETE CASCADE,
   PRIMARY KEY (time_id, group_id)
 );
+
+-- ═══════════════════════════════════════════════
+-- Migración: Área personal (perfil + vehículos)
+-- ═══════════════════════════════════════════════
+
+-- Campos de perfil en users
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bio        TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS location   VARCHAR(100);
+
+-- Tabla de vehículos
+CREATE TABLE IF NOT EXISTS vehicles (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name       VARCHAR(100) NOT NULL,    -- "Ford Fiesta R5"
+  make       VARCHAR(50),              -- marca
+  model      VARCHAR(50),              -- modelo
+  year       INT,
+  photo_url  TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_vehicles_user ON vehicles(user_id);
+
+-- Vehículo usado en cada tiempo (opcional)
+ALTER TABLE times ADD COLUMN IF NOT EXISTS vehicle_id UUID REFERENCES vehicles(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_times_vehicle ON times(vehicle_id);
 -- Índices para búsquedas frecuentes
 CREATE INDEX idx_times_user ON times(user_id, created_at DESC);
 CREATE INDEX idx_times_stage ON times(stage_id, duration_ms ASC);
