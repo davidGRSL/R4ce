@@ -54,17 +54,17 @@ export default function Rankings() {
   const resto    = ranking.slice(3);
 
   return (
-    <div className="p-8 lg:p-12 max-w-6xl">
-      <header className="mb-10">
+    <div className="p-4 md:p-8 lg:p-12 max-w-6xl">
+      <header className="mb-6 md:mb-10">
         <p className="eyebrow">Clasificaciones</p>
-        <h1 className="text-5xl font-bold mt-1">Rankings</h1>
-        <p className="text-ink/60 mt-3 max-w-lg">
+        <h1 className="text-3xl md:text-5xl font-bold mt-1">Rankings</h1>
+        <p className="text-ink/60 mt-3 max-w-lg text-sm md:text-base">
           Tiempos oficiales por tramo. Solo se incluyen tiempos públicos —
           el mejor tiempo de cada piloto cuenta para el ranking.
         </p>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 lg:gap-8">
         {/* Lista de tramos */}
         <aside>
           <div className="relative mb-3">
@@ -78,7 +78,7 @@ export default function Rankings() {
             />
           </div>
 
-          <div className="border border-ink/10 max-h-[calc(100vh-280px)] overflow-y-auto">
+          <div className="border border-ink/10 max-h-56 lg:max-h-[calc(100vh-280px)] overflow-y-auto">
             {loading ? (
               <p className="p-4 font-mono text-xs text-ink/40">Cargando tramos…</p>
             ) : filteredStages.length === 0 ? (
@@ -129,12 +129,12 @@ export default function Rankings() {
           ) : (
             <>
               {/* Stage header */}
-              <div className="border border-ink/10 p-6 mb-6 bg-ink text-paper">
+              <div className="border border-ink/10 p-4 md:p-6 mb-6 bg-ink text-paper">
                 <p className="font-mono text-[10px] uppercase tracking-widest text-paper/40">
                   Tramo activo
                 </p>
-                <h2 className="font-display text-3xl font-bold mt-1">{selectedStage.name}</h2>
-                <div className="flex items-center gap-6 mt-3 text-xs font-mono text-paper/60">
+                <h2 className="font-display text-2xl md:text-3xl font-bold mt-1">{selectedStage.name}</h2>
+                <div className="flex items-center flex-wrap gap-x-6 gap-y-1 mt-3 text-xs font-mono text-paper/60">
                   <span>Dif. {selectedStage.difficultyLevel || '—'}/5</span>
                   <span>Est. {selectedStage.estimatedDuration ? `${selectedStage.estimatedDuration}s` : '—'}</span>
                   <span>{ranking.length} pilotos</span>
@@ -147,15 +147,15 @@ export default function Rankings() {
                   {[1, 0, 2].map((idx) => {
                     const p = podio[idx];
                     if (!p) return <div key={idx} className="bg-paper p-6" />;
-                    const heights = { 0: 'h-44', 1: 'h-32', 2: 'h-28' };
+                    const heights = { 0: 'h-36 md:h-44', 1: 'h-28 md:h-32', 2: 'h-24 md:h-28' };
                     const accents = { 0: 'border-signal', 1: 'border-ink/30', 2: 'border-rally/60' };
                     return (
-                      <div key={p.userId} className={`bg-paper p-6 flex flex-col justify-end ${heights[idx]} border-b-4 ${accents[idx]}`}>
+                      <div key={p.userId} className={`bg-paper p-3 md:p-6 flex flex-col justify-end ${heights[idx]} border-b-4 ${accents[idx]} min-w-0`}>
                         <p className="font-mono text-[10px] uppercase tracking-widest text-ink/40 mb-1">
                           Pos. {p.rank}
                         </p>
-                        <p className="font-display text-xl font-bold truncate">{p.pseudonym}</p>
-                        <p className="font-mono text-sm text-ink/70 mt-1">{formatDuration(p.durationMs)}</p>
+                        <p className="font-display text-sm md:text-xl font-bold truncate">{p.pseudonym}</p>
+                        <p className="font-mono text-xs md:text-sm text-ink/70 mt-1">{formatDuration(p.durationMs)}</p>
                       </div>
                     );
                   })}
@@ -168,23 +168,23 @@ export default function Rankings() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-ink/10">
-                        <th className="px-4 py-3 text-[10px] font-mono uppercase tracking-widest text-ink/50 text-left w-16">Pos</th>
-                        <th className="px-4 py-3 text-[10px] font-mono uppercase tracking-widest text-ink/50 text-left">Piloto</th>
-                        <th className="px-4 py-3 text-[10px] font-mono uppercase tracking-widest text-ink/50 text-right">Tiempo</th>
-                        <th className="px-4 py-3 text-[10px] font-mono uppercase tracking-widest text-ink/50 text-right">Dif.</th>
-                        <th className="px-4 py-3 text-[10px] font-mono uppercase tracking-widest text-ink/50 text-right">Fecha</th>
+                        <th className="px-2 md:px-4 py-3 text-[10px] font-mono uppercase tracking-widest text-ink/50 text-left w-10 md:w-16">Pos</th>
+                        <th className="px-2 md:px-4 py-3 text-[10px] font-mono uppercase tracking-widest text-ink/50 text-left">Piloto</th>
+                        <th className="px-2 md:px-4 py-3 text-[10px] font-mono uppercase tracking-widest text-ink/50 text-right">Tiempo</th>
+                        <th className="px-2 md:px-4 py-3 text-[10px] font-mono uppercase tracking-widest text-ink/50 text-right">Dif.</th>
+                        <th className="px-4 py-3 text-[10px] font-mono uppercase tracking-widest text-ink/50 text-right hidden sm:table-cell">Fecha</th>
                       </tr>
                     </thead>
                     <tbody>
                       {resto.map((p) => (
                         <tr key={p.userId} className="border-b border-ink/5 hover:bg-ink/[0.02] transition-colors">
-                          <td className="px-4 py-3 font-mono text-sm text-ink/60">{p.rank}</td>
-                          <td className="px-4 py-3 text-sm">{p.pseudonym}</td>
-                          <td className="px-4 py-3 text-sm font-mono text-right">{formatDuration(p.durationMs)}</td>
-                          <td className="px-4 py-3 text-xs font-mono text-right text-ink/50">
+                          <td className="px-2 md:px-4 py-3 font-mono text-sm text-ink/60">{p.rank}</td>
+                          <td className="px-2 md:px-4 py-3 text-sm truncate max-w-[110px] md:max-w-none">{p.pseudonym}</td>
+                          <td className="px-2 md:px-4 py-3 text-sm font-mono text-right whitespace-nowrap">{formatDuration(p.durationMs)}</td>
+                          <td className="px-2 md:px-4 py-3 text-xs font-mono text-right text-ink/50 whitespace-nowrap">
                             {formatGap(p.durationMs, leaderMs)}
                           </td>
-                          <td className="px-4 py-3 text-xs font-mono text-right text-ink/50">{formatDate(p.createdAt)}</td>
+                          <td className="px-4 py-3 text-xs font-mono text-right text-ink/50 hidden sm:table-cell">{formatDate(p.createdAt)}</td>
                         </tr>
                       ))}
                     </tbody>

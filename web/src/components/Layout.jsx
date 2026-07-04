@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useNavigate, Outlet } from 'react-router-dom';
-import { LogOut, LayoutGrid, Trophy, Route as RouteIcon } from 'lucide-react';
+import { LogOut, LayoutGrid, Trophy, Route as RouteIcon, Radar, User } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { clearTokens, getRefreshToken, getUser } from '../lib/auth.js';
 
@@ -28,6 +28,7 @@ export default function Layout() {
 
   const navItems = [
     { to: '/',         label: 'Dashboard', icon: LayoutGrid },
+    { to: '/live',     label: 'Live',      icon: Radar },
     { to: '/stages',   label: 'Tramos',    icon: RouteIcon },
     { to: '/rankings', label: 'Rankings',  icon: Trophy },
   ];
@@ -43,8 +44,8 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen flex">
-      {/* Sidebar */}
-      <aside className="w-64 bg-ink text-paper flex flex-col">
+      {/* Sidebar — solo escritorio */}
+      <aside className="w-64 bg-ink text-paper hidden md:flex flex-col">
         {/* Logo */}
         <div className="p-6 border-b border-paper/10">
           <div className="flex items-baseline gap-2">
@@ -116,9 +117,34 @@ export default function Layout() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-x-hidden">
+      <main className="flex-1 overflow-x-hidden pb-16 md:pb-0">
         <Outlet />
       </main>
+
+      {/* Barra inferior — solo móvil */}
+      <nav
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-ink text-paper
+                   flex items-stretch border-t border-paper/10
+                   pb-[env(safe-area-inset-bottom)]"
+      >
+        {[...navItems, { to: '/profile', label: 'Perfil', icon: User }].map(
+          ({ to, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === '/'}
+              className={({ isActive }) =>
+                `flex-1 flex flex-col items-center justify-center gap-0.5 py-2
+                 text-[10px] font-mono uppercase tracking-wide
+                 ${isActive ? 'text-rally' : 'text-paper/60'}`
+              }
+            >
+              <Icon size={18} strokeWidth={2.25} />
+              <span>{label}</span>
+            </NavLink>
+          )
+        )}
+      </nav>
     </div>
   );
 }

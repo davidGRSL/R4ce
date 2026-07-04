@@ -12,6 +12,7 @@ import {
   removeFavorite,
   listFavorites,
   getStageDetail,
+  listNearbyStages,
 } from '../controllers/stageController.js';
 import { requireAuth, optionalAuth } from '../middleware/auth.js';
 
@@ -22,6 +23,7 @@ router.get('/',                  optionalAuth, listPublicStages);
 router.post('/',                 requireAuth,  createStage);
 router.get('/my/stages',         requireAuth,  listMyStages);
 router.get('/favorites/list',    requireAuth,  listFavorites);
+router.get('/near',              optionalAuth, listNearbyStages);
 
 // Operaciones sobre un tramo concreto
 router.get('/:id',               optionalAuth, getStage);

@@ -164,6 +164,17 @@ CREATE INDEX IF NOT EXISTS idx_vehicles_user ON vehicles(user_id);
 ALTER TABLE times ADD COLUMN IF NOT EXISTS vehicle_id UUID REFERENCES vehicles(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS idx_times_vehicle ON times(vehicle_id);
+
+-- Tramos favoritos de cada usuario
+CREATE TABLE IF NOT EXISTS favorites (
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  stage_id   UUID NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, stage_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id, created_at DESC);
+
 -- Índices para búsquedas frecuentes
 CREATE INDEX idx_times_user ON times(user_id, created_at DESC);
 CREATE INDEX idx_times_stage ON times(stage_id, duration_ms ASC);

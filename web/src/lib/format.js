@@ -27,3 +27,12 @@ export function formatGap(ms, leaderMs) {
   const diff = (ms - leaderMs) / 1000;
   return `+${diff.toFixed(3)}`;
 }
+
+/**
+ * Diferencia con signo: "-1.203" (mejor) / "+0.450" (peor)
+ */
+export function formatSignedGap(diffMs) {
+  if (diffMs == null) return '—';
+  const s = (diffMs / 1000).toFixed(3);
+  return diffMs > 0 ? `+${s}` : s;
+}

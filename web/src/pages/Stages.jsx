@@ -30,7 +30,7 @@ export default function Stages() {
   }
 
   return (
-    <div className="p-8 lg:p-12 max-w-6xl">
+    <div className="p-4 md:p-8 lg:p-12 max-w-6xl">
       {/* Header + Crea tu circuito lado a lado */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8 items-stretch">
         {/* Izquierda: header */}
