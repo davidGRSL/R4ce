@@ -7,7 +7,9 @@
  * Asume backend corriendo en http://localhost:3000
  */
 
-const API = 'http://backend:3000/api/v1';
+// Desde tu máquina (fuera de Docker): node seed.js  → usa localhost
+// Desde dentro de un contenedor: API_URL=http://backend:3000/api/v1 node seed.js
+const API = process.env.API_URL || 'http://localhost:3000/api/v1';
 // ─────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────

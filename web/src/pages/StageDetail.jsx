@@ -80,7 +80,7 @@ export default function StageDetail() {
   const leaderMs = ranking[0]?.durationMs;
 
   return (
-    <div className="p-8 lg:p-12 max-w-6xl">
+    <div className="p-4 md:p-8 lg:p-12 max-w-6xl">
       <button
         onClick={() => navigate('/stages')}
         className="text-sm text-ink/60 hover:text-rally inline-flex items-center gap-2 mb-6 font-mono uppercase tracking-widest text-xs"

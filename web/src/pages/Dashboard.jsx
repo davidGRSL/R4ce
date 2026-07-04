@@ -47,21 +47,21 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <div className="p-8 lg:p-12 max-w-6xl">
+    <div className="p-4 md:p-8 lg:p-12 max-w-6xl">
       {/* Header */}
-      <header className="mb-12">
+      <header className="mb-8 md:mb-12">
         <p className="eyebrow">Panel de control</p>
-        <h1 className="text-5xl font-bold mt-1">
+        <h1 className="text-3xl md:text-5xl font-bold mt-1">
           Hola, <span className="text-rally">{user?.pseudonym || user?.username}</span>
         </h1>
-        <p className="text-ink/60 mt-3 max-w-lg">
+        <p className="text-ink/60 mt-3 max-w-lg text-sm md:text-base">
           Resumen de tu actividad. Los datos se actualizan en tiempo real
           según tus carreras y las de tus grupos.
         </p>
       </header>
 
       {/* Stats grid */}
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-px bg-ink/10 mb-12">
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-ink/10 mb-8 md:mb-12">
         <StatCard
           icon={Activity}
           label="Tramos creados"
@@ -107,34 +107,59 @@ export default function Dashboard() {
             </p>
           </div>
         ) : (
-          <div className="border border-ink/10">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-ink/10 text-left">
-                  <Th>Tramo</Th>
-                  <Th align="right">Tiempo</Th>
-                  <Th align="right">Vel. máx</Th>
-                  <Th align="right">Fecha</Th>
-                  <Th align="right">Visibilidad</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentTimes.map((t) => (
-                  <tr key={t.id} className="border-b border-ink/5 hover:bg-ink/[0.02] transition-colors">
-                    <Td>
-                      <Link to={`/times/${t.id}`} className="hover:text-rally transition-colors">
-                        {t.stageName || '—'}
-                      </Link>
-                    </Td>
-                    <Td align="right" mono>{formatDuration(t.durationMs)}</Td>
-                    <Td align="right" mono>{t.maxSpeed ? `${t.maxSpeed.toFixed(1)} km/h` : '—'}</Td>
-                    <Td align="right" mono>{formatDate(t.createdAt)}</Td>
-                    <Td align="right"><VisibilityBadge v={t.visibility} /></Td>
+          <>
+            {/* Móvil: tarjetas apiladas */}
+            <div className="md:hidden border border-ink/10 divide-y divide-ink/5">
+              {recentTimes.map((t) => (
+                <Link
+                  key={t.id}
+                  to={`/times/${t.id}`}
+                  className="block p-4 active:bg-ink/[0.03]"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium text-sm truncate">{t.stageName || '—'}</p>
+                    <p className="font-mono text-base font-semibold shrink-0">{formatDuration(t.durationMs)}</p>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 mt-1.5">
+                    <p className="font-mono text-xs text-ink/50">
+                      {t.maxSpeed ? `${t.maxSpeed.toFixed(1)} km/h · ` : ''}{formatDate(t.createdAt)}
+                    </p>
+                    <VisibilityBadge v={t.visibility} />
+                  </div>
+                </Link>
+              ))}
+            </div>
+
+            {/* Escritorio: tabla */}
+            <div className="hidden md:block border border-ink/10">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-ink/10 text-left">
+                    <Th>Tramo</Th>
+                    <Th align="right">Tiempo</Th>
+                    <Th align="right">Vel. máx</Th>
+                    <Th align="right">Fecha</Th>
+                    <Th align="right">Visibilidad</Th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {recentTimes.map((t) => (
+                    <tr key={t.id} className="border-b border-ink/5 hover:bg-ink/[0.02] transition-colors">
+                      <Td>
+                        <Link to={`/times/${t.id}`} className="hover:text-rally transition-colors">
+                          {t.stageName || '—'}
+                        </Link>
+                      </Td>
+                      <Td align="right" mono>{formatDuration(t.durationMs)}</Td>
+                      <Td align="right" mono>{t.maxSpeed ? `${t.maxSpeed.toFixed(1)} km/h` : '—'}</Td>
+                      <Td align="right" mono>{formatDate(t.createdAt)}</Td>
+                      <Td align="right"><VisibilityBadge v={t.visibility} /></Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
     </div>
@@ -143,12 +168,12 @@ export default function Dashboard() {
 
 function StatCard({ icon: Icon, label, value, subtitle, loading, mono }) {
   return (
-    <div className="bg-paper p-6">
-      <div className="flex items-start justify-between mb-4">
+    <div className="bg-paper p-4 md:p-6">
+      <div className="flex items-start justify-between mb-3 md:mb-4 gap-2">
         <p className="eyebrow">{label}</p>
-        <Icon size={16} className="text-ink/40" strokeWidth={2.5} />
+        <Icon size={16} className="text-ink/40 shrink-0" strokeWidth={2.5} />
       </div>
-      <p className={`text-4xl font-bold ${mono ? 'font-mono text-3xl' : 'font-display'} tracking-tight`}>
+      <p className={`text-2xl md:text-4xl font-bold ${mono ? 'font-mono md:text-3xl' : 'font-display'} tracking-tight`}>
         {loading ? '…' : value}
       </p>
       {subtitle && (

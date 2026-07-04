@@ -471,8 +471,7 @@ export async function assignStageGroups(req, res) {
   }
 }
 // ─────────────────────────────────────────────
-// PATCH para stageController.js
-// Añadir al final del archivo — endpoints de favoritos
+// Favoritos
 // ─────────────────────────────────────────────
 
 // POST /api/v1/stages/:id/favorite
@@ -565,6 +564,70 @@ export async function listFavorites(req, res) {
     return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
   }
 }
+
+// ─────────────────────────────────────────────
+// GET /api/v1/stages/near?lat=..&lng=..&radius=500
+// Tramos cuya SALIDA está a menos de `radius` metros de la
+// posición dada. Solo tramos visibles para el usuario:
+// públicos+publicados, propios, o de grupos a los que pertenece.
+// ─────────────────────────────────────────────
+export async function listNearbyStages(req, res) {
+  const lat    = parseFloat(req.query.lat);
+  const lng    = parseFloat(req.query.lng);
+  const radius = Math.min(10000, Math.max(50, parseInt(req.query.radius) || 500));
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return res.status(400).json({ error: { message: 'lat y lng son obligatorios y deben ser coordenadas válidas', status: 400 } });
+  }
+
+  try {
+    const result = await query(
+      `SELECT s.*, u.pseudonym,
+              ST_Distance(
+                ST_StartPoint(s.route_line)::geography,
+                ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
+              ) AS distance_m
+       FROM stages s
+       LEFT JOIN users u ON u.id = s.creator_id
+       WHERE s.route_line IS NOT NULL
+         AND ST_DWithin(
+               ST_StartPoint(s.route_line)::geography,
+               ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+               $3
+             )
+         AND (
+           (s.visibility = 'public' AND s.is_published = true)
+           OR s.creator_id = $4
+           OR EXISTS (
+             SELECT 1 FROM stage_groups sg
+             JOIN group_members gm ON gm.group_id = sg.group_id
+             WHERE sg.stage_id = s.id AND gm.user_id = $4
+           )
+         )
+       ORDER BY distance_m ASC
+       LIMIT 10`,
+      [lng, lat, radius, req.user?.id ?? null]
+    );
+
+    return res.json({
+      stages: result.rows.map((row) => {
+        const props = row.route_geojson?.properties || {};
+        return {
+          ...publicStage(row),
+          distanceM:   Math.round(row.distance_m),
+          start:       props.start ?? null,
+          end:         props.end ?? null,
+          checkpoints: props.checkpoints ?? [],
+        };
+      }),
+    });
+  } catch (err) {
+    console.error('Error en listNearbyStages:', err);
+    return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
+  }
+}
+
+// ─────────────────────────────────────────────
 // GET /api/v1/stages/:id/detail
 // Devuelve TODA la info del tramo: datos, creador, mi mejor tiempo
 // con sus splits, y el ranking completo del tramo.
@@ -633,6 +696,34 @@ export async function getStageDetail(req, res) {
       }
     }
 
+    // 2b. Mejor tiempo global del tramo (público, con splits) —
+    // referencia para la comparativa en vivo del cronómetro.
+    let globalBest = null;
+    {
+      const globalBestResult = await query(
+        `SELECT t.id, t.duration_ms, t.route_gps, t.created_at, u.pseudonym
+         FROM times t
+         LEFT JOIN users u ON u.id = t.user_id
+         WHERE t.stage_id = $1 AND t.visibility = 'public'
+         ORDER BY t.duration_ms ASC
+         LIMIT 1`,
+        [id]
+      );
+      if (globalBestResult.rows[0]) {
+        const row = globalBestResult.rows[0];
+        const parsed = typeof row.route_gps === 'string'
+          ? JSON.parse(row.route_gps || '{}')
+          : (row.route_gps || {});
+        globalBest = {
+          id:         row.id,
+          durationMs: row.duration_ms,
+          pseudonym:  row.pseudonym ?? 'Anónimo',
+          createdAt:  row.created_at,
+          splits:     parsed.splits ?? [],
+        };
+      }
+    }
+
     // 3. Ranking del tramo (mejor tiempo público por usuario)
     const rankingResult = await query(
       `SELECT tr.rank, tr.duration_ms, tr.created_at, u.id AS user_id, u.pseudonym
@@ -665,6 +756,7 @@ export async function getStageDetail(req, res) {
         checkpoints:       props.checkpoints ?? [],
       },
       myBest,
+      globalBest,
       ranking: rankingResult.rows.map(row => ({
         rank:       row.rank,
         userId:     row.user_id,

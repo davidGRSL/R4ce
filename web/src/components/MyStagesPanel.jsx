@@ -112,9 +112,9 @@ function StageRow({ stage, onView, onEdit, onDeleted }) {
 
   return (
     <li className="p-4">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-medium truncate">{stage.name}</h3>
             <span className={`px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest border shrink-0 ${visStyles[stage.visibility]}`}>
               {stage.visibility}
@@ -144,7 +144,7 @@ function StageRow({ stage, onView, onEdit, onDeleted }) {
         </div>
 
         {confirmStep === 0 && (
-          <div className="flex gap-2 shrink-0">
+          <div className="flex gap-2 shrink-0 self-start sm:self-center">
             <button onClick={onView} className="btn-ghost text-xs py-1.5" title="Ver toda la información">
               <Eye size={13} /> Ver
             </button>

@@ -9,6 +9,7 @@ import Stages from './pages/Stages.jsx';
 import StageCreate from './pages/StageCreate.jsx';
 import StageDetail from './pages/StageDetail.jsx';
 import Profile from './pages/Profile.jsx';
+import Live from './pages/Live.jsx';
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
         }
       >
         <Route index                 element={<Dashboard />} />
+        <Route path="live"            element={<Live />} />
         <Route path="stages"          element={<Stages />} />
         <Route path="stages/create"   element={<StageCreate />} />
         <Route path="stages/:id"      element={<StageDetail />} />
