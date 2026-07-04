@@ -11,7 +11,8 @@ import authRoutes from './routes/authRoutes.js';
 import stageRoutes from './routes/stageRoutes.js';
 import timeRoutes from './routes/timeRoutes.js';
 import groupRoutes from './routes/groupRoutes.js';
-
+import profileRoutes from './routes/profileRoutes.js';
+import vehicleRoutes from './routes/vehicleRoutes.js';
 // Cargar variables de entorno
 dotenv.config();
 
@@ -63,7 +64,8 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/stages', stageRoutes);
 app.use('/api/v1/times', timeRoutes);
 app.use('/api/v1/groups', groupRoutes);
-
+app.use('/api/v1/profile', profileRoutes);
+app.use('/api/v1/vehicles', vehicleRoutes);
 app.get('/api/v1/ping', (req, res) => {
   res.json({ message: 'pong', timestamp: new Date().toISOString() });
 });

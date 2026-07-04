@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { NavLink, useNavigate, Outlet } from 'react-router-dom';
 import { LogOut, LayoutGrid, Trophy, Route as RouteIcon } from 'lucide-react';
 import { api } from '../lib/api.js';
@@ -6,6 +7,16 @@ import { clearTokens, getRefreshToken, getUser } from '../lib/auth.js';
 export default function Layout() {
   const navigate = useNavigate();
   const user = getUser();
+
+  const [profile, setProfile] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    api.get('/profile')
+      .then(({ data }) => { if (active) setProfile(data.profile); })
+      .catch(() => {}); // silencioso: si falla, usamos fallback de getUser()
+    return () => { active = false; };
+  }, []);
 
   async function handleLogout() {
     try {
@@ -20,6 +31,15 @@ export default function Layout() {
     { to: '/stages',   label: 'Tramos',    icon: RouteIcon },
     { to: '/rankings', label: 'Rankings',  icon: Trophy },
   ];
+
+  const displayName = profile?.pseudonym || user?.pseudonym || user?.username || 'Piloto';
+  const avatarUrl   = profile?.avatarUrl || null;
+  const initials    = displayName
+    .split(' ')
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 
   return (
     <div className="min-h-screen flex">
@@ -58,10 +78,32 @@ export default function Layout() {
 
         {/* User + logout */}
         <div className="p-4 border-t border-paper/10">
-          <div className="mb-3">
-            <p className="text-xs font-mono text-paper/40 uppercase tracking-widest">Sesión</p>
-            <p className="text-sm font-medium mt-1 truncate">{user?.pseudonym || user?.username}</p>
-          </div>
+          {/* Enlace al área personal */}
+          <NavLink
+            to="/profile"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-2 py-2 mb-2 transition-colors group
+               ${isActive ? 'bg-paper/10' : 'hover:bg-paper/5'}`
+            }
+          >
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={displayName}
+                className="w-9 h-9 rounded-full object-cover border border-paper/20 shrink-0"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-rally/20 text-rally flex items-center justify-center
+                              text-xs font-bold font-mono border border-paper/20 shrink-0">
+                {initials}
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="text-[10px] font-mono text-paper/40 uppercase tracking-widest">Mi área</p>
+              <p className="text-sm font-medium truncate group-hover:text-paper">{displayName}</p>
+            </div>
+          </NavLink>
+
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-2 px-3 py-2 text-xs font-mono uppercase tracking-widest
