@@ -8,6 +8,7 @@ import TimeDetail from './pages/TimeDetail.jsx';
 import Stages from './pages/Stages.jsx';
 import StageCreate from './pages/StageCreate.jsx';
 import StageDetail from './pages/StageDetail.jsx';
+import Profile from './pages/Profile.jsx';
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="stages/:id/edit" element={<StageCreate />} />
         <Route path="rankings"        element={<Rankings />} />
         <Route path="times/:id"       element={<TimeDetail />} />
+        <Route path="profile"         element={<Profile />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
