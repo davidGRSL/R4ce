@@ -5,8 +5,11 @@ FROM node:20-alpine
 # si no hay binario precompilado para musl (Alpine), npm lo compila con node-gyp.
 RUN apk add --no-cache python3 make g++
 
-RUN apk add --no-cache vips-dev
 WORKDIR /app
+
+# sharp: usar SIEMPRE los binarios precompilados (musl) en lugar de
+# compilar contra la libvips del sistema — evita necesitar node-gyp.
+ENV SHARP_IGNORE_GLOBAL_LIBVIPS=1
 
 # Copiamos primero solo los manifiestos para aprovechar la cache de capas de Docker:
 # si no cambian package.json/lock, este paso no se vuelve a ejecutar en builds futuros.

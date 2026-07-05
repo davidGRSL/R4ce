@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, MapPin, Flag, Crosshair, Save } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, MapPin, Flag, Crosshair, Save, Shapes, X } from 'lucide-react';
 import { api } from '../lib/api.js';
+import { generateSilhouette } from '../lib/silhouette.js';
 import { reverseGeocode } from '../lib/geocode.js';
 import MapPicker from "../components/MapPicker.jsx";
 import PlaceSearch from "../components/PlaceSearch.jsx";
@@ -30,6 +31,25 @@ export default function StageCreate() {
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState('');
   const [loading, setLoading] = useState(editing);
+  const [silhouette, setSilhouette] = useState(null); // SVG generado (solo bajo demanda)
+  const [genBusy, setGenBusy]       = useState(false);
+  const [genNote, setGenNote]       = useState(null);  // aviso si se usó el trazado recto
+
+  async function handleGenerateSilhouette() {
+    setGenBusy(true);
+    setGenNote(null);
+    try {
+      const result = await generateSilhouette(form);
+      setSilhouette(result?.svg ?? null);
+      if (result && !result.road) {
+        setGenNote('No se pudo trazar por carretera (sin ruta o sin conexión) — se dibujó el trazado recto entre puntos.');
+      }
+    } catch {
+      setGenNote('No se pudo generar la silueta. Inténtalo de nuevo.');
+    } finally {
+      setGenBusy(false);
+    }
+  }
 
   // Cargar grupos del usuario
   useEffect(() => {
@@ -57,6 +77,7 @@ export default function StageCreate() {
           })),
           groupIds: [],
         });
+        setSilhouette(s.silhouetteSvg || null);
       } catch (err) {
         setError('No se pudo cargar el tramo');
       } finally {
@@ -139,6 +160,9 @@ export default function StageCreate() {
       difficultyLevel: Number(form.difficultyLevel),
       estimatedDuration: form.estimatedDuration ? Number(form.estimatedDuration) : null,
       routeGeojson,
+      // En edición, sin silueta = '' para borrarla explícitamente
+      // (null significa "no tocar" en el backend)
+      silhouetteSvg: silhouette ?? (editing ? '' : null),
     };
 
     try {
@@ -248,7 +272,7 @@ export default function StageCreate() {
                 {form.checkpoints.map((cp, i) => (
                   <li key={i} className="flex items-center justify-between px-3 py-2">
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="w-5 h-5 rounded-full bg-rally text-paper text-[10px] font-mono flex items-center justify-center shrink-0">
+                      <span className="w-5 h-5 rounded-full bg-rally text-white text-[10px] font-mono flex items-center justify-center shrink-0">
                         {i + 1}
                       </span>
                       <span className="text-sm truncate">{cp.name}</span>
@@ -356,6 +380,58 @@ export default function StageCreate() {
               placeholder="Tipo de firme, características, advertencias…"
               className="input resize-none"
             />
+          </div>
+
+          {/* Silueta del tramo (solo bajo demanda, para no gastar almacenamiento) */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="label mb-0">Silueta del tramo</label>
+              <span className="text-[10px] font-mono text-ink/40 uppercase tracking-widest">Opcional</span>
+            </div>
+
+            {silhouette ? (
+              <div className="border border-ink/10">
+                <div
+                  className="p-2 bg-paper [&_svg]:w-full [&_svg]:h-auto"
+                  dangerouslySetInnerHTML={{ __html: silhouette }}
+                />
+                <div className="flex border-t border-ink/10">
+                  <button
+                    type="button"
+                    disabled={genBusy}
+                    onClick={handleGenerateSilhouette}
+                    className="flex-1 py-2 text-[10px] font-mono uppercase tracking-widest text-ink/60 hover:text-ink hover:bg-ink/[0.03] flex items-center justify-center gap-1.5 disabled:opacity-40"
+                  >
+                    <Shapes size={12} /> {genBusy ? 'Trazando…' : 'Regenerar'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setSilhouette(null); setGenNote(null); }}
+                    className="flex-1 py-2 text-[10px] font-mono uppercase tracking-widest text-ink/60 hover:text-rally hover:bg-rally/5 flex items-center justify-center gap-1.5 border-l border-ink/10"
+                  >
+                    <X size={12} /> Quitar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled={!form.start || !form.end || genBusy}
+                  onClick={handleGenerateSilhouette}
+                  className="btn-ghost w-full justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Shapes size={15} /> {genBusy ? 'Trazando por carretera…' : 'Generar silueta'}
+                </button>
+                <p className="text-[10px] font-mono text-ink/40 mt-1.5 leading-relaxed">
+                  Traza el recorrido real por carretera (curvas incluidas) con salida,
+                  meta y referencias numeradas. {(!form.start || !form.end) && 'Marca antes inicio y meta.'}
+                </p>
+              </>
+            )}
+            {genNote && (
+              <p className="text-[10px] font-mono text-signal mt-1.5 leading-relaxed">{genNote}</p>
+            )}
           </div>
 
           {error && (

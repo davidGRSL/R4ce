@@ -10,11 +10,15 @@
   body {
     @apply bg-paper text-ink font-sans;
     background-image:
-      radial-gradient(circle at 1px 1px, rgba(10, 10, 10, 0.04) 1px, transparent 0);
+      radial-gradient(circle at 1px 1px, rgba(242, 241, 236, 0.05) 1px, transparent 0);
     background-size: 24px 24px;
   }
   h1, h2, h3, h4 {
     @apply font-display tracking-tight;
+  }
+  /* Titulares inclinados estilo velocidad */
+  h1 {
+    @apply italic uppercase;
   }
 }
 
@@ -43,7 +47,18 @@
     @apply block text-xs font-mono uppercase tracking-widest text-ink/60 mb-1;
   }
   .eyebrow {
-    @apply text-xs font-mono uppercase tracking-[0.2em] text-ink/50;
+    @apply text-xs font-mono uppercase tracking-[0.2em] text-rally/90;
+  }
+  /* Franja diagonal racing para cabeceras y separadores */
+  .stripe-bar {
+    height: 4px;
+    background: repeating-linear-gradient(
+      -45deg,
+      #e63946 0 10px,
+      transparent 10px 18px,
+      #fcbf49 18px 22px,
+      transparent 22px 30px
+    );
   }
 }
 
@@ -51,4 +66,12 @@
 .leaflet-container {
   background: #1a1a1a;
   font-family: 'JetBrains Mono', monospace;
+}
+
+/* Visor de modelos 3D — mismo fondo que el main */
+model-viewer {
+  width: 100%;
+  height: 100%;
+  --poster-color: transparent;
+  background: #121212;
 }

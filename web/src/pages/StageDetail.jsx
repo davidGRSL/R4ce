@@ -270,6 +270,17 @@ export default function StageDetail() {
               })}
             </div>
           )}
+
+          {/* Trazada del tramo (silueta, si se generó) */}
+          {stage.silhouetteSvg && (
+            <div className="mt-8">
+              <p className="eyebrow mb-3">Trazada</p>
+              <div
+                className="border border-ink/10 p-3 bg-paper [&_svg]:w-full [&_svg]:h-auto"
+                dangerouslySetInnerHTML={{ __html: stage.silhouetteSvg }}
+              />
+            </div>
+          )}
         </section>
       </div>
     </div>

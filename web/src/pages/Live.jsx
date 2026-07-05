@@ -269,6 +269,16 @@ export default function Live() {
         setGpsError('Este tramo no tiene salida y meta definidas.');
         return;
       }
+
+      // Los puntos se guardan en orden GeoJSON [lng, lat];
+      // aquí trabajamos en [lat, lng] — normalizar al cargar.
+      const toLatLng = ([lng, lat]) => [lat, lng];
+      st.start = { ...st.start, coord: toLatLng(st.start.coord) };
+      st.end   = { ...st.end,   coord: toLatLng(st.end.coord) };
+      st.checkpoints = (st.checkpoints ?? []).map((cp) => ({
+        ...cp,
+        coord: toLatLng(cp.coord),
+      }));
       const mode = getCompareMode();
       const ref =
         (mode === 'personal' ? data.myBest : (data.globalBest ?? data.myBest)) ?? null;
@@ -502,11 +512,11 @@ export default function Live() {
       {/* ── RUNNING ── */}
       {phase === 'running' && stage && (
         <div className="space-y-4">
-          <div className="bg-ink text-paper p-6 text-center">
-            <p className="eyebrow !text-paper/50">{stage.name}</p>
+          <div className="bg-carbon text-ink border-t-4 border-rally p-6 text-center">
+            <p className="eyebrow">{stage.name}</p>
             <p className="font-mono text-5xl font-medium tabular-nums mt-2">{formatDuration(elapsed)}</p>
             {reference && (
-              <p className="text-xs font-mono text-paper/50 mt-2">
+              <p className="text-xs font-mono text-ink/50 mt-2">
                 {reference.label} · {formatDuration(reference.durationMs)}
               </p>
             )}
@@ -620,15 +630,15 @@ function FinishedPanel({
   return (
     <div className="space-y-4">
       {/* Tiempo total */}
-      <div className={`p-6 text-center text-paper ${totalDiff == null ? 'bg-ink' : improved ? 'bg-forest' : 'bg-rally'}`}>
-        <p className="eyebrow !text-paper/60">{stage.name} · Resultado</p>
+      <div className={`p-6 text-center text-white ${totalDiff == null ? 'bg-track' : improved ? 'bg-forest' : 'bg-rally'}`}>
+        <p className="eyebrow !text-white/60">{stage.name} · Resultado</p>
         <p className="font-mono text-5xl font-medium tabular-nums mt-2">{formatDuration(totalMs)}</p>
         {totalDiff != null ? (
           <p className="font-mono text-lg mt-2 font-bold">
             {formatSignedGap(totalDiff)} s · {improved ? '¡MEJOR TIEMPO!' : `vs ${reference.label}`}
           </p>
         ) : (
-          <p className="text-sm text-paper/70 mt-2">Primer tiempo registrado en este tramo</p>
+          <p className="text-sm text-white/70 mt-2">Primer tiempo registrado en este tramo</p>
         )}
       </div>
 

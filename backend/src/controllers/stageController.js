@@ -316,7 +316,8 @@ export async function updateStage(req, res) {
          description        = COALESCE($3, description),
          route_geojson      = COALESCE($4, route_geojson),
          route_line         = COALESCE($5::geometry, route_line),
-         silhouette_svg     = COALESCE($6, silhouette_svg),
+         -- '' explícito = borrar la silueta; null = no tocarla
+         silhouette_svg     = CASE WHEN $6::text = '' THEN NULL ELSE COALESCE($6, silhouette_svg) END,
          visibility         = COALESCE($7, visibility),
          difficulty_level   = COALESCE($8, difficulty_level),
          estimated_duration = COALESCE($9, estimated_duration),
@@ -744,6 +745,7 @@ export async function getStageDetail(req, res) {
         name:              stage.name,
         description:       stage.description,
         routeGeojson:      stage.route_geojson,
+        silhouetteSvg:     stage.silhouette_svg ?? null,
         visibility:        stage.visibility,
         difficultyLevel:   stage.difficulty_level,
         estimatedDuration: stage.estimated_duration,

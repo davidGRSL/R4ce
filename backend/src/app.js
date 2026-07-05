@@ -50,6 +50,15 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
+// Archivos subidos (fotos de perfil, coches y modelos 3D — driver local)
+app.use('/uploads', express.static(process.env.UPLOAD_DIR || '/app/uploads', {
+  maxAge: '7d',
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.glb')) res.setHeader('Content-Type', 'model/gltf-binary');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  },
+}));
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({

@@ -160,6 +160,9 @@ CREATE TABLE IF NOT EXISTS vehicles (
 
 CREATE INDEX IF NOT EXISTS idx_vehicles_user ON vehicles(user_id);
 
+-- Modelo 3D del vehículo (.glb, se muestra girando en el garaje)
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS model_url TEXT;
+
 -- Vehículo usado en cada tiempo (opcional)
 ALTER TABLE times ADD COLUMN IF NOT EXISTS vehicle_id UUID REFERENCES vehicles(id) ON DELETE SET NULL;
 

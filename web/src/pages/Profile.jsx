@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Camera, Trash2, Save, Loader2 } from 'lucide-react';
 import { api } from '../lib/api.js';
+import Garage from '../components/Garage.jsx';
 
 function formatBest(ms) {
   if (ms == null) return '—';
@@ -109,7 +110,7 @@ export default function Profile() {
   ];
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
+    <div className="p-4 md:p-8 max-w-3xl mx-auto">
       {/* Cabecera */}
       <div className="flex items-center gap-5 mb-8">
         <div className="relative">
@@ -168,6 +169,9 @@ export default function Profile() {
           </div>
         ))}
       </div>
+
+      {/* Garaje: coches con foto y modelo 3D girando */}
+      <Garage />
 
       {/* Formulario */}
       <form onSubmit={handleSave} className="space-y-5">

@@ -153,7 +153,7 @@ function StageRow({ stage, onView, onEdit, onDeleted }) {
             </button>
             <button
               onClick={() => setConfirmStep(1)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border border-rally/30 text-rally hover:bg-rally hover:text-paper transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border border-rally/30 text-rally hover:bg-rally hover:text-white transition-colors"
             >
               <Trash2 size={13} /> Borrar
             </button>
@@ -177,7 +177,7 @@ function StageRow({ stage, onView, onEdit, onDeleted }) {
             <button onClick={() => setConfirmStep(0)} className="btn-ghost text-xs py-1.5">Cancelar</button>
             <button
               onClick={() => setConfirmStep(2)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border border-rally text-rally hover:bg-rally hover:text-paper transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border border-rally text-rally hover:bg-rally hover:text-white transition-colors"
             >
               Sí, continuar
             </button>
@@ -212,7 +212,7 @@ function StageRow({ stage, onView, onEdit, onDeleted }) {
             <button
               onClick={doDelete}
               disabled={typed !== stage.name || deleting}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-rally text-paper border border-rally
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-rally text-white border border-rally
                          disabled:opacity-40 disabled:cursor-not-allowed hover:bg-rally/90 transition-colors"
             >
               <Trash2 size={13} />
