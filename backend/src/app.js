@@ -23,6 +23,11 @@ const __dirname = dirname(__filename);
 const app = express();
 const httpServer = createServer(app);
 
+// Detrás del proxy de Vite (dev) o un reverse proxy (prod): req.ip debe ser
+// la IP real del cliente (X-Forwarded-For), no la del proxy. Lo usa el
+// rate limiting. Nivel 1 = confiar solo en el primer proxy.
+app.set('trust proxy', 1);
+
 // Socket.io con configuración CORS
 const io = new SocketIOServer(httpServer, {
   cors: {
