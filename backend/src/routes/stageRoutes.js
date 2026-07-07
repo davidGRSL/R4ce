@@ -13,8 +13,11 @@ import {
   listFavorites,
   getStageDetail,
   listNearbyStages,
+  addLike,
+  removeLike,
 } from '../controllers/stageController.js';
 import { requireAuth, optionalAuth } from '../middleware/auth.js';
+import { rateLimit } from '../middleware/rateLimit.js';
 
 const router = Router();
 
@@ -33,6 +36,8 @@ router.post('/:id/publish',      requireAuth,  togglePublish);
 router.post('/:id/groups',       requireAuth,  assignStageGroups);
 router.post('/:id/favorite',     requireAuth,  addFavorite);
 router.delete('/:id/favorite',   requireAuth,  removeFavorite);
+router.post('/:id/like',         requireAuth,  rateLimit({ prefix: 'like', windowSec: 60, max: 30 }), addLike);
+router.delete('/:id/like',       requireAuth,  rateLimit({ prefix: 'like', windowSec: 60, max: 30 }), removeLike);
 router.get('/:id/detail', optionalAuth, getStageDetail);
 
 export default router;

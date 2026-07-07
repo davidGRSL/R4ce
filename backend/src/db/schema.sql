@@ -160,6 +160,9 @@ CREATE TABLE IF NOT EXISTS vehicles (
 
 CREATE INDEX IF NOT EXISTS idx_vehicles_user ON vehicles(user_id);
 
+-- Modelo 3D del vehículo (.glb, se muestra girando en el garaje)
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS model_url TEXT;
+
 -- Vehículo usado en cada tiempo (opcional)
 ALTER TABLE times ADD COLUMN IF NOT EXISTS vehicle_id UUID REFERENCES vehicles(id) ON DELETE SET NULL;
 
@@ -203,3 +206,23 @@ LEFT JOIN stages s ON u.id = s.creator_id
 LEFT JOIN stages ON true
 WHERE u.is_active = true
 GROUP BY u.id, u.pseudonym;
+
+-- ═══════════════════════════════════════════════
+-- Migración: feature social fase 1 (likes + vistas)
+-- Para contenedores ya creados, ejecutar los ALTER/CREATE de este
+-- bloque con: docker exec -it rally-postgres psql -U rally_user -d rally_db
+-- ═══════════════════════════════════════════════
+
+-- Likes simples (❤) sobre tramos. Distinto de favorites:
+-- favorito = "quiero tenerlo a mano", like = "me gusta este tramo".
+CREATE TABLE IF NOT EXISTS stage_likes (
+  user_id    UUID NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
+  stage_id   UUID NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, stage_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_stage_likes_stage ON stage_likes(stage_id);
+
+-- Contador de vistas del detalle (dedupe por usuario/IP vía Redis, 6h)
+ALTER TABLE stages ADD COLUMN IF NOT EXISTS view_count INT NOT NULL DEFAULT 0;

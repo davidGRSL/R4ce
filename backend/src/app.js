@@ -23,6 +23,11 @@ const __dirname = dirname(__filename);
 const app = express();
 const httpServer = createServer(app);
 
+// Detrás del proxy de Vite (dev) o un reverse proxy (prod): req.ip debe ser
+// la IP real del cliente (X-Forwarded-For), no la del proxy. Lo usa el
+// rate limiting. Nivel 1 = confiar solo en el primer proxy.
+app.set('trust proxy', 1);
+
 // Socket.io con configuración CORS
 const io = new SocketIOServer(httpServer, {
   cors: {
@@ -49,6 +54,15 @@ if (process.env.NODE_ENV === 'development') {
     next();
   });
 }
+
+// Archivos subidos (fotos de perfil, coches y modelos 3D — driver local)
+app.use('/uploads', express.static(process.env.UPLOAD_DIR || '/app/uploads', {
+  maxAge: '7d',
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.glb')) res.setHeader('Content-Type', 'model/gltf-binary');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  },
+}));
 
 // Health check endpoint
 app.get('/health', (req, res) => {

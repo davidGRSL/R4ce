@@ -45,16 +45,17 @@ export default function Layout() {
   return (
     <div className="min-h-screen flex">
       {/* Sidebar — solo escritorio */}
-      <aside className="w-64 bg-ink text-paper hidden md:flex flex-col">
+      <aside className="w-64 bg-carbon text-ink hidden md:flex flex-col">
         {/* Logo */}
-        <div className="p-6 border-b border-paper/10">
+        <div className="p-6 border-b border-ink/10">
           <div className="flex items-baseline gap-2">
-            <span className="font-display text-3xl font-bold tracking-tighter">R4ce</span>
-            <span className="font-mono text-[10px] text-paper/40 uppercase tracking-widest">v0.1</span>
+            <span className="font-display text-3xl font-bold tracking-tighter italic">R4ce</span>
+            <span className="font-mono text-[10px] text-ink/40 uppercase tracking-widest">v0.1</span>
           </div>
-          <p className="text-[10px] font-mono text-paper/40 mt-1 uppercase tracking-widest">
+          <p className="text-[10px] font-mono text-ink/40 mt-1 uppercase tracking-widest">
             Panel de control
           </p>
+          <div className="stripe-bar mt-4 -mb-1" />
         </div>
 
         {/* Nav */}
@@ -67,8 +68,8 @@ export default function Layout() {
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-colors
                  ${isActive
-                    ? 'bg-paper text-ink'
-                    : 'text-paper/70 hover:text-paper hover:bg-paper/5'}`
+                    ? 'bg-rally text-white'
+                    : 'text-ink/60 hover:text-ink hover:bg-white/5'}`
               }
             >
               <Icon size={16} strokeWidth={2.5} />
@@ -78,37 +79,37 @@ export default function Layout() {
         </nav>
 
         {/* User + logout */}
-        <div className="p-4 border-t border-paper/10">
+        <div className="p-4 border-t border-ink/10">
           {/* Enlace al área personal */}
           <NavLink
             to="/profile"
             className={({ isActive }) =>
               `flex items-center gap-3 px-2 py-2 mb-2 transition-colors group
-               ${isActive ? 'bg-paper/10' : 'hover:bg-paper/5'}`
+               ${isActive ? 'bg-white/10' : 'hover:bg-white/5'}`
             }
           >
             {avatarUrl ? (
               <img
                 src={avatarUrl}
                 alt={displayName}
-                className="w-9 h-9 rounded-full object-cover border border-paper/20 shrink-0"
+                className="w-9 h-9 rounded-full object-cover border border-ink/20 shrink-0"
               />
             ) : (
               <div className="w-9 h-9 rounded-full bg-rally/20 text-rally flex items-center justify-center
-                              text-xs font-bold font-mono border border-paper/20 shrink-0">
+                              text-xs font-bold font-mono border border-ink/20 shrink-0">
                 {initials}
               </div>
             )}
             <div className="min-w-0">
-              <p className="text-[10px] font-mono text-paper/40 uppercase tracking-widest">Mi área</p>
-              <p className="text-sm font-medium truncate group-hover:text-paper">{displayName}</p>
+              <p className="text-[10px] font-mono text-ink/40 uppercase tracking-widest">Mi área</p>
+              <p className="text-sm font-medium truncate group-hover:text-ink">{displayName}</p>
             </div>
           </NavLink>
 
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-2 px-3 py-2 text-xs font-mono uppercase tracking-widest
-                       text-paper/60 hover:text-rally transition-colors"
+                       text-ink/50 hover:text-rally transition-colors"
           >
             <LogOut size={14} />
             Cerrar sesión
@@ -123,8 +124,8 @@ export default function Layout() {
 
       {/* Barra inferior — solo móvil */}
       <nav
-        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-ink text-paper
-                   flex items-stretch border-t border-paper/10
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-carbon text-ink
+                   flex items-stretch border-t border-ink/10
                    pb-[env(safe-area-inset-bottom)]"
       >
         {[...navItems, { to: '/profile', label: 'Perfil', icon: User }].map(
@@ -136,7 +137,7 @@ export default function Layout() {
               className={({ isActive }) =>
                 `flex-1 flex flex-col items-center justify-center gap-0.5 py-2
                  text-[10px] font-mono uppercase tracking-wide
-                 ${isActive ? 'text-rally' : 'text-paper/60'}`
+                 ${isActive ? 'text-rally' : 'text-ink/50'}`
               }
             >
               <Icon size={18} strokeWidth={2.25} />

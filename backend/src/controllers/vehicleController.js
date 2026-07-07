@@ -1,6 +1,7 @@
 import { query } from '../db/pool.js';
-import { processAndStore, keyFromUrl } from '../middleware/upload.js';
+import { processAndStore, storeModel, keyFromUrl } from '../middleware/upload.js';
 import { storage } from '../storage/index.js';
+import { optimizeGlb } from '../utils/optimizeGlb.js';
 
 function publicVehicle(row) {
   return {
@@ -10,6 +11,7 @@ function publicVehicle(row) {
     model:     row.model,
     year:      row.year,
     photoUrl:  row.photo_url,
+    modelUrl:  row.model_url ?? null,
     timesCount: row.times_count != null ? parseInt(row.times_count) : undefined,
     createdAt: row.created_at,
   };
@@ -113,9 +115,13 @@ export async function deleteVehicle(req, res) {
   if (check.error === 'forbidden') return res.status(403).json({ error: { message: 'No tienes permiso', status: 403 } });
 
   try {
-    // Borrar la foto del storage si existe
+    // Borrar la foto y el modelo 3D del storage si existen
     if (check.vehicle.photo_url) {
       const key = keyFromUrl(check.vehicle.photo_url);
+      if (key) await storage.delete(key);
+    }
+    if (check.vehicle.model_url) {
+      const key = keyFromUrl(check.vehicle.model_url);
       if (key) await storage.delete(key);
     }
     await query(`DELETE FROM vehicles WHERE id = $1`, [id]);
@@ -160,6 +166,52 @@ export async function uploadVehiclePhoto(req, res) {
   } catch (err) {
     console.error('Error en uploadVehiclePhoto:', err);
     return res.status(500).json({ error: { message: 'Error procesando la imagen', status: 500 } });
+  }
+}
+
+// ─────────────────────────────────────────────
+// POST /api/v1/vehicles/:id/model  (multipart, campo "model")
+// Modelo 3D del vehículo (.glb) — se muestra girando en el garaje.
+// ─────────────────────────────────────────────
+export async function uploadVehicleModel(req, res) {
+  const { id } = req.params;
+
+  if (!req.file) {
+    return res.status(400).json({ error: { message: 'No se recibió ningún modelo 3D', status: 400 } });
+  }
+
+  const check = await assertOwner(id, req.user.id);
+  if (check.error === 'notfound') return res.status(404).json({ error: { message: 'Vehículo no encontrado', status: 404 } });
+  if (check.error === 'forbidden') return res.status(403).json({ error: { message: 'No tienes permiso', status: 403 } });
+
+  try {
+    // Optimización automática: Draco + texturas WebP 512px.
+    // Si el modelo no se puede procesar, se guarda el original.
+    let buffer = req.file.buffer;
+    try {
+      const optimized = await optimizeGlb(buffer);
+      console.log(
+        `  [glb] optimizado: ${(buffer.length / 1048576).toFixed(2)}MB → ${(optimized.length / 1048576).toFixed(2)}MB`
+      );
+      buffer = optimized;
+    } catch (optErr) {
+      console.warn('  [glb] no se pudo optimizar, guardando original:', optErr.message);
+    }
+
+    const { url } = await storeModel(buffer);
+
+    await query(`UPDATE vehicles SET model_url = $2 WHERE id = $1`, [id, url]);
+
+    // Borrar el anterior
+    if (check.vehicle.model_url) {
+      const oldKey = keyFromUrl(check.vehicle.model_url);
+      if (oldKey) await storage.delete(oldKey);
+    }
+
+    return res.json({ modelUrl: url });
+  } catch (err) {
+    console.error('Error en uploadVehicleModel:', err);
+    return res.status(500).json({ error: { message: 'Error guardando el modelo 3D', status: 500 } });
   }
 }
 

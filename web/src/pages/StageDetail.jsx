@@ -4,11 +4,12 @@ import { MapContainer, TileLayer, Polyline, CircleMarker, Marker } from 'react-l
 import L from 'leaflet';
 import {
   ArrowLeft, Pencil, Trophy, Gauge, Clock, User, MapPin, Flag,
-  Crosshair, Eye, Medal
+  Crosshair, Eye, Medal, Heart, Star, Users
 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { formatDuration, formatDate, formatGap } from '../lib/format.js';
 import { getUser } from '../lib/auth.js';
+import StageBadges from '../components/StageBadges.jsx';
 
 // Iconos Leaflet
 function makeIcon(color) {
@@ -38,11 +39,20 @@ export default function StageDetail() {
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
 
+  // Estado social (se inicializa con la respuesta del detalle)
+  const [liked,      setLiked]      = useState(false);
+  const [likesCount, setLikesCount] = useState(0);
+  const [favorited,  setFavorited]  = useState(false);
+  const [socialBusy, setSocialBusy] = useState(false);
+
   useEffect(() => {
     async function load() {
       try {
         const { data } = await api.get(`/stages/${id}/detail`);
         setData(data);
+        setLiked(data.stage.likedByMe ?? false);
+        setLikesCount(data.stage.likesCount ?? 0);
+        setFavorited(data.stage.favoritedByMe ?? false);
       } catch (err) {
         setError(err.response?.data?.error?.message || 'Error cargando el tramo');
       } finally {
@@ -51,6 +61,40 @@ export default function StageDetail() {
     }
     load();
   }, [id]);
+
+  async function toggleLike() {
+    if (socialBusy) return;
+    setSocialBusy(true);
+    try {
+      const { data } = liked
+        ? await api.delete(`/stages/${id}/like`)
+        : await api.post(`/stages/${id}/like`);
+      setLiked(data.liked);
+      setLikesCount(data.likesCount);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSocialBusy(false);
+    }
+  }
+
+  async function toggleFavorite() {
+    if (socialBusy) return;
+    setSocialBusy(true);
+    try {
+      if (favorited) {
+        await api.delete(`/stages/${id}/favorite`);
+        setFavorited(false);
+      } else {
+        await api.post(`/stages/${id}/favorite`);
+        setFavorited(true);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSocialBusy(false);
+    }
+  }
 
   if (loading) return <div className="p-12 font-mono text-sm text-ink/40">Cargando…</div>;
 
@@ -100,6 +144,7 @@ export default function StageDetail() {
                 Publicado
               </span>
             )}
+            <StageBadges stage={{ ...stage, likesCount }} />
           </div>
           <h1 className="text-4xl font-bold">{stage.name}</h1>
           <div className="flex items-center gap-4 mt-3 text-sm text-ink/60">
@@ -112,19 +157,43 @@ export default function StageDetail() {
           </div>
         </div>
 
-        {isOwner && (
-          <button onClick={() => navigate(`/stages/${id}/edit`)} className="btn-ghost shrink-0">
-            <Pencil size={14} /> Editar
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={toggleLike}
+            title={liked ? 'Quitar like' : 'Me gusta este tramo'}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 border text-sm transition-colors
+                        ${liked
+                          ? 'border-rally bg-rally text-paper'
+                          : 'border-ink/20 text-ink/70 hover:border-rally hover:text-rally'}`}
+          >
+            <Heart size={15} className={liked ? 'fill-current' : ''} />
+            <span className="font-mono">{likesCount}</span>
           </button>
-        )}
+          <button
+            onClick={toggleFavorite}
+            title={favorited ? 'Quitar de favoritos' : 'Guardar en favoritos'}
+            className={`inline-flex items-center px-3 py-2 border text-sm transition-colors
+                        ${favorited
+                          ? 'border-signal bg-signal text-ink'
+                          : 'border-ink/20 text-ink/70 hover:border-signal hover:text-signal'}`}
+          >
+            <Star size={15} className={favorited ? 'fill-current' : ''} />
+          </button>
+          {isOwner && (
+            <button onClick={() => navigate(`/stages/${id}/edit`)} className="btn-ghost">
+              <Pencil size={14} /> Editar
+            </button>
+          )}
+        </div>
       </header>
 
       {/* Métricas del tramo */}
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-px bg-ink/10 mb-8">
+      <section className="grid grid-cols-2 md:grid-cols-5 gap-px bg-ink/10 mb-8">
         <InfoCard icon={Gauge} label="Dificultad" value={`${stage.difficultyLevel || '—'}/5`} />
         <InfoCard icon={Clock} label="Duración est." value={stage.estimatedDuration ? `${stage.estimatedDuration}s` : '—'} mono />
         <InfoCard icon={Crosshair} label="Puntos ref." value={stage.checkpoints?.length || 0} mono />
-        <InfoCard icon={Trophy} label="Pilotos" value={ranking.length} mono />
+        <InfoCard icon={Users} label="Pilotos" value={stage.pilotsCount ?? ranking.length} mono />
+        <InfoCard icon={Eye} label="Vistas" value={stage.viewCount ?? 0} mono />
       </section>
 
       {/* Mi mejor tiempo */}
@@ -268,6 +337,17 @@ export default function StageDetail() {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Trazada del tramo (silueta, si se generó) */}
+          {stage.silhouetteSvg && (
+            <div className="mt-8">
+              <p className="eyebrow mb-3">Trazada</p>
+              <div
+                className="border border-ink/10 p-3 bg-paper [&_svg]:w-full [&_svg]:h-auto"
+                dangerouslySetInnerHTML={{ __html: stage.silhouetteSvg }}
+              />
             </div>
           )}
         </section>

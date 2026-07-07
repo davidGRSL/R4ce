@@ -1,4 +1,5 @@
 import { query } from '../db/pool.js';
+import { getRedis } from '../db/redis.js';
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -19,7 +20,45 @@ function publicStage(row) {
     creatorPseudonym:  row.pseudonym ?? null,
     createdAt:         row.created_at,
     updatedAt:         row.updated_at,
+    // Señales sociales (0/false si la query no las incluye)
+    likesCount:        row.likes_count ?? 0,
+    favoritesCount:    row.favorites_count ?? 0,
+    pilotsCount:       row.pilots_count ?? 0,
+    viewCount:         row.view_count ?? 0,
+    likedByMe:         row.liked_by_me ?? false,
+    favoritedByMe:     row.favorited_by_me ?? false,
   };
+}
+
+// Subqueries de contadores sociales, reutilizadas en listados y detalle.
+// Requieren el alias `s` para stages y un placeholder $N para el userId
+// (null si no hay sesión → EXISTS devuelve false).
+function socialCountsSQL(userParamIdx) {
+  return `
+    (SELECT COUNT(*)::int FROM stage_likes sl WHERE sl.stage_id = s.id)          AS likes_count,
+    (SELECT COUNT(*)::int FROM favorites f   WHERE f.stage_id = s.id)            AS favorites_count,
+    (SELECT COUNT(DISTINCT t.user_id)::int FROM times t WHERE t.stage_id = s.id) AS pilots_count,
+    EXISTS(SELECT 1 FROM stage_likes sl2 WHERE sl2.stage_id = s.id AND sl2.user_id = $${userParamIdx}::uuid) AS liked_by_me,
+    EXISTS(SELECT 1 FROM favorites f2   WHERE f2.stage_id = s.id AND f2.user_id  = $${userParamIdx}::uuid) AS favorited_by_me`;
+}
+
+// Comprueba que el usuario puede ver el tramo (público, propio o de grupo).
+// Devuelve un mensaje de error o null si tiene acceso.
+async function checkStageAccess(stage, userId) {
+  const isOwner = stage.creator_id === userId;
+  if (stage.visibility === 'private' && !isOwner) {
+    return 'No tienes acceso a este tramo';
+  }
+  if (stage.visibility === 'group' && !isOwner) {
+    const memberCheck = await query(
+      `SELECT 1 FROM stage_groups sg
+       JOIN group_members gm ON gm.group_id = sg.group_id
+       WHERE sg.stage_id = $1 AND gm.user_id = $2 LIMIT 1`,
+      [stage.id, userId]
+    );
+    if (memberCheck.rows.length === 0) return 'No tienes acceso a este tramo';
+  }
+  return null;
 }
 
 async function logAudit({ userId, action, resourceId, req }) {
@@ -135,6 +174,8 @@ export async function listPublicStages(req, res) {
   const offset     = (page - 1) * limit;
   const difficulty = parseInt(req.query.difficulty) || null;
   const search     = req.query.search?.trim() || null;
+  // sort=popular ordena por señales sociales; por defecto, recientes
+  const sort       = req.query.sort === 'popular' ? 'popular' : 'recent';
 
   try {
     const conditions = [`s.visibility = 'public'`, `s.is_published = true`];
@@ -157,14 +198,22 @@ export async function listPublicStages(req, res) {
     const countResult = await query(`SELECT COUNT(*) FROM stages s WHERE ${where}`, params);
     const total = parseInt(countResult.rows[0].count);
 
+    // Contadores simples, sin score ponderado (decisión fase 1, ver ROADMAP).
+    // El SELECT exterior permite ordenar por los alias de los contadores.
+    const orderBy = sort === 'popular'
+      ? `(likes_count + favorites_count + pilots_count) DESC, view_count DESC, created_at DESC`
+      : `created_at DESC`;
+
     const result = await query(
-      `SELECT s.*, u.pseudonym
-       FROM stages s
-       LEFT JOIN users u ON u.id = s.creator_id
-       WHERE ${where}
-       ORDER BY s.created_at DESC
-       LIMIT $${pIdx} OFFSET $${pIdx + 1}`,
-      [...params, limit, offset]
+      `SELECT * FROM (
+         SELECT s.*, u.pseudonym, ${socialCountsSQL(pIdx)}
+         FROM stages s
+         LEFT JOIN users u ON u.id = s.creator_id
+         WHERE ${where}
+       ) sub
+       ORDER BY ${orderBy}
+       LIMIT $${pIdx + 1} OFFSET $${pIdx + 2}`,
+      [...params, req.user?.id ?? null, limit, offset]
     );
 
     return res.json({
@@ -316,7 +365,8 @@ export async function updateStage(req, res) {
          description        = COALESCE($3, description),
          route_geojson      = COALESCE($4, route_geojson),
          route_line         = COALESCE($5::geometry, route_line),
-         silhouette_svg     = COALESCE($6, silhouette_svg),
+         -- '' explícito = borrar la silueta; null = no tocarla
+         silhouette_svg     = CASE WHEN $6::text = '' THEN NULL ELSE COALESCE($6, silhouette_svg) END,
          visibility         = COALESCE($7, visibility),
          difficulty_level   = COALESCE($8, difficulty_level),
          estimated_duration = COALESCE($9, estimated_duration),
@@ -636,13 +686,14 @@ export async function getStageDetail(req, res) {
   const { id } = req.params;
 
   try {
-    // 1. Datos del tramo + creador
+    // 1. Datos del tramo + creador + señales sociales
     const stageResult = await query(
-      `SELECT s.*, u.pseudonym AS creator_pseudonym, u.username AS creator_username
+      `SELECT s.*, u.pseudonym AS creator_pseudonym, u.username AS creator_username,
+              ${socialCountsSQL(2)}
        FROM stages s
        LEFT JOIN users u ON u.id = s.creator_id
        WHERE s.id = $1`,
-      [id]
+      [id, req.user?.id ?? null]
     );
 
     const stage = stageResult.rows[0];
@@ -665,6 +716,25 @@ export async function getStageDetail(req, res) {
       if (memberCheck.rows.length === 0) {
         return res.status(403).json({ error: { message: 'No tienes acceso a este tramo', status: 403 } });
       }
+    }
+
+    // 1b. Contar la vista (dedupe por usuario/IP en Redis, ventana 6h).
+    // Fail-open: sin Redis no se cuenta, nunca se rompe la petición.
+    try {
+      const redis = await getRedis();
+      if (redis) {
+        const viewer = req.user?.id || req.ip;
+        const fresh = await redis.set(`view:${id}:${viewer}`, '1', { NX: true, EX: 21600 });
+        if (fresh) {
+          const vc = await query(
+            `UPDATE stages SET view_count = view_count + 1 WHERE id = $1 RETURNING view_count`,
+            [id]
+          );
+          stage.view_count = vc.rows[0]?.view_count ?? stage.view_count;
+        }
+      }
+    } catch (err) {
+      console.error('  [views] no se pudo contar la vista:', err.message);
     }
 
     // 2. Mi mejor tiempo en este tramo (con splits y track)
@@ -744,6 +814,7 @@ export async function getStageDetail(req, res) {
         name:              stage.name,
         description:       stage.description,
         routeGeojson:      stage.route_geojson,
+        silhouetteSvg:     stage.silhouette_svg ?? null,
         visibility:        stage.visibility,
         difficultyLevel:   stage.difficulty_level,
         estimatedDuration: stage.estimated_duration,
@@ -754,6 +825,12 @@ export async function getStageDetail(req, res) {
         start:             props.start ?? null,
         end:               props.end ?? null,
         checkpoints:       props.checkpoints ?? [],
+        likesCount:        stage.likes_count ?? 0,
+        favoritesCount:    stage.favorites_count ?? 0,
+        pilotsCount:       stage.pilots_count ?? 0,
+        viewCount:         stage.view_count ?? 0,
+        likedByMe:         stage.liked_by_me ?? false,
+        favoritedByMe:     stage.favorited_by_me ?? false,
       },
       myBest,
       globalBest,
@@ -767,6 +844,64 @@ export async function getStageDetail(req, res) {
     });
   } catch (err) {
     console.error('Error en getStageDetail:', err);
+    return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
+  }
+}
+
+// ─────────────────────────────────────────────
+// Likes — señal social simple, distinta de favoritos
+// ─────────────────────────────────────────────
+
+// POST /api/v1/stages/:id/like
+export async function addLike(req, res) {
+  const { id } = req.params;
+
+  try {
+    const stageResult = await query(`SELECT id, visibility, creator_id FROM stages WHERE id = $1`, [id]);
+    const stage = stageResult.rows[0];
+
+    if (!stage) {
+      return res.status(404).json({ error: { message: 'Tramo no encontrado', status: 404 } });
+    }
+
+    const accessError = await checkStageAccess(stage, req.user.id);
+    if (accessError) {
+      return res.status(403).json({ error: { message: accessError, status: 403 } });
+    }
+
+    await query(
+      `INSERT INTO stage_likes (user_id, stage_id) VALUES ($1, $2)
+       ON CONFLICT (user_id, stage_id) DO NOTHING`,
+      [req.user.id, id]
+    );
+
+    const count = await query(
+      `SELECT COUNT(*)::int AS likes FROM stage_likes WHERE stage_id = $1`,
+      [id]
+    );
+
+    return res.status(201).json({ liked: true, stageId: id, likesCount: count.rows[0].likes });
+  } catch (err) {
+    console.error('Error en addLike:', err);
+    return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
+  }
+}
+
+// DELETE /api/v1/stages/:id/like
+export async function removeLike(req, res) {
+  const { id } = req.params;
+
+  try {
+    await query(`DELETE FROM stage_likes WHERE user_id = $1 AND stage_id = $2`, [req.user.id, id]);
+
+    const count = await query(
+      `SELECT COUNT(*)::int AS likes FROM stage_likes WHERE stage_id = $1`,
+      [id]
+    );
+
+    return res.json({ liked: false, stageId: id, likesCount: count.rows[0].likes });
+  } catch (err) {
+    console.error('Error en removeLike:', err);
     return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
   }
 }

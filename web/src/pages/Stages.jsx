@@ -1,14 +1,23 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Plus, Star, MapPin, Gauge } from 'lucide-react';
+import {
+  ChevronLeft, ChevronRight, Plus, Star, MapPin, Gauge,
+  Heart, Eye, Users, Flame, Clock, User,
+} from 'lucide-react';
 import { api } from '../lib/api.js';
 import { formatDuration } from '../lib/format.js';
 import MyStagesPanel from '../components/MyStagesPanel.jsx';
+import StageBadges from '../components/StageBadges.jsx';
 
 export default function Stages() {
   const [favorites, setFavorites] = useState([]);
   const [loading,   setLoading]   = useState(true);
   const carousel = useRef(null);
+
+  // Descubrir: tramos públicos ordenados por popularidad o novedad
+  const [discover,        setDiscover]        = useState([]);
+  const [discoverLoading, setDiscoverLoading] = useState(true);
+  const [sort,            setSort]            = useState('popular');
 
   useEffect(() => {
     async function load() {
@@ -23,6 +32,23 @@ export default function Stages() {
     }
     load();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadDiscover() {
+      setDiscoverLoading(true);
+      try {
+        const { data } = await api.get(`/stages?sort=${sort}&limit=12`);
+        if (!cancelled) setDiscover(data.stages || []);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (!cancelled) setDiscoverLoading(false);
+      }
+    }
+    loadDiscover();
+    return () => { cancelled = true; };
+  }, [sort]);
 
   function scroll(dir) {
     if (!carousel.current) return;
@@ -118,11 +144,103 @@ export default function Stages() {
         )}
       </section>
 
+      {/* Descubrir tramos de la comunidad */}
+      <section className="mb-12 pt-12 border-t border-ink/10">
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-5">
+          <div>
+            <p className="eyebrow">Comunidad</p>
+            <h2 className="text-xl font-bold mt-0.5">Descubrir tramos</h2>
+          </div>
+          <div className="flex border border-ink/20">
+            <SortButton active={sort === 'popular'} onClick={() => setSort('popular')} icon={Flame}>
+              Populares
+            </SortButton>
+            <SortButton active={sort === 'recent'} onClick={() => setSort('recent')} icon={Clock}>
+              Recientes
+            </SortButton>
+          </div>
+        </div>
+
+        {discoverLoading ? (
+          <p className="font-mono text-sm text-ink/40">Buscando tramos…</p>
+        ) : discover.length === 0 ? (
+          <div className="border border-dashed border-ink/20 p-10 text-center">
+            <Users size={28} className="mx-auto text-ink/20 mb-3" strokeWidth={1.5} />
+            <p className="text-ink/60">Todavía no hay tramos públicos.</p>
+            <p className="text-xs font-mono text-ink/40 uppercase tracking-widest mt-1">
+              Publica el tuyo y estrena la comunidad
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-ink/10">
+            {discover.map((s) => (
+              <DiscoverCard key={s.id} stage={s} />
+            ))}
+          </div>
+        )}
+      </section>
+
       {/* Mis tramos */}
       <div className="mt-12 pt-12 border-t border-ink/10">
         <MyStagesPanel />
       </div>
     </div>
+  );
+}
+
+function SortButton({ active, onClick, icon: Icon, children }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-widest transition-colors
+                  ${active ? 'bg-ink text-paper' : 'text-ink/60 hover:text-ink'}`}
+    >
+      <Icon size={12} /> {children}
+    </button>
+  );
+}
+
+function DiscoverCard({ stage }) {
+  return (
+    <Link
+      to={`/stages/${stage.id}`}
+      className="bg-paper p-5 hover:bg-ink/[0.02] transition-colors group"
+    >
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <h3 className="font-display text-lg font-bold leading-tight group-hover:text-rally transition-colors">
+          {stage.name}
+        </h3>
+        {stage.likedByMe && <Heart size={14} className="text-rally fill-rally shrink-0 mt-1" />}
+      </div>
+
+      <div className="flex items-center gap-2 text-xs text-ink/50 mb-2">
+        <User size={12} />
+        <span>{stage.creatorPseudonym || 'Anónimo'}</span>
+        <span className="font-mono">· Nv. {stage.difficultyLevel || '—'}</span>
+      </div>
+
+      <StageBadges stage={stage} />
+
+      {stage.description && (
+        <p className="text-xs text-ink/50 mt-2 line-clamp-2">{stage.description}</p>
+      )}
+
+      {/* Señales sociales */}
+      <div className="flex items-center gap-4 mt-4 pt-4 border-t border-ink/10 font-mono text-xs text-ink/60">
+        <span className="inline-flex items-center gap-1" title="Likes">
+          <Heart size={13} className="text-rally" /> {stage.likesCount}
+        </span>
+        <span className="inline-flex items-center gap-1" title="Favoritos">
+          <Star size={13} className="text-signal" /> {stage.favoritesCount}
+        </span>
+        <span className="inline-flex items-center gap-1" title="Pilotos con tiempo">
+          <Users size={13} className="text-forest" /> {stage.pilotsCount}
+        </span>
+        <span className="inline-flex items-center gap-1 ml-auto text-ink/40" title="Vistas">
+          <Eye size={13} /> {stage.viewCount}
+        </span>
+      </div>
+    </Link>
   );
 }
 

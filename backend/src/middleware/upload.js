@@ -25,6 +25,30 @@ const upload = multer({
 // Espera un campo de formulario llamado "image"
 export const uploadSingle = upload.single('image');
 
+// ── Modelos 3D (.glb) ─────────────────────────
+// Se guardan tal cual (sin procesar). Límite 30MB.
+const uploadModel = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 30 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const isGlb =
+      /\.glb$/i.test(file.originalname) ||
+      /^model\/gltf-binary$/i.test(file.mimetype);
+    if (isGlb) cb(null, true);
+    else cb(new Error('Formato no soportado. Sube un modelo 3D en formato .glb'));
+  },
+});
+
+// Espera un campo de formulario llamado "model"
+export const uploadModelSingle = uploadModel.single('model');
+
+/** Guarda un modelo 3D .glb sin procesar. @returns { url, key } */
+export async function storeModel(buffer) {
+  const key = `models/${crypto.randomUUID()}.glb`;
+  const url = await storage.save(buffer, key, 'model/gltf-binary');
+  return { url, key };
+}
+
 /**
  * Procesa el buffer con sharp y lo guarda.
  * @param buffer  - req.file.buffer

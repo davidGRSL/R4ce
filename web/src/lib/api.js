@@ -1,9 +1,11 @@
 import axios from 'axios';
 import { getAccessToken, setAccessToken, clearTokens, getRefreshToken } from './auth.js';
 
+// Sin Content-Type fijo: axios pone application/json para objetos
+// y multipart/form-data (con boundary) automáticamente para FormData.
+// Forzarlo a JSON rompía las subidas de archivos (avatar, fotos, .glb).
 export const api = axios.create({
   baseURL: '/api/v1',
-  headers: { 'Content-Type': 'application/json' },
 });
 
 // Adjuntar token a cada petición
