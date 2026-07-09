@@ -21,6 +21,12 @@ export default defineConfig({
         target: 'http://backend:3000',
         changeOrigin: true,
       },
+      // Socket.io (chat de grupos en tiempo real)
+      '/socket.io': {
+        target: 'http://backend:3000',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
 });

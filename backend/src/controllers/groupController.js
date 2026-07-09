@@ -1,5 +1,6 @@
 import { query } from '../db/pool.js';
 import crypto from 'crypto';
+import { emitToGroup } from '../socket.js';
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -255,6 +256,7 @@ export async function joinGroup(req, res) {
     );
 
     await logAudit({ userId: req.user.id, action: 'group.join', resourceId: group.id, req });
+    emitToGroup(group.id, 'group:member_change', { groupId: group.id });
 
     return res.status(201).json({ message: `Te has unido a "${group.name}"`, groupId: group.id });
   } catch (err) {
@@ -288,6 +290,7 @@ export async function leaveGroup(req, res) {
     );
 
     await logAudit({ userId: req.user.id, action: 'group.leave', resourceId: id, req });
+    emitToGroup(id, 'group:member_change', { groupId: id });
 
     return res.status(204).send();
   } catch (err) {
@@ -329,6 +332,7 @@ export async function kickMember(req, res) {
     );
 
     await logAudit({ userId: req.user.id, action: 'group.kick', resourceId: id, req });
+    emitToGroup(id, 'group:member_change', { groupId: id });
 
     return res.status(204).send();
   } catch (err) {
@@ -402,6 +406,7 @@ export async function updateMemberRole(req, res) {
     );
 
     await logAudit({ userId: req.user.id, action: 'group.role_update', resourceId: id, req });
+    emitToGroup(id, 'group:member_change', { groupId: id });
 
     return res.json({ message: `Rol actualizado a ${role}` });
   } catch (err) {

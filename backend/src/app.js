@@ -1,6 +1,5 @@
 import express from 'express';
 import { createServer } from 'http';
-import { Server as SocketIOServer } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
@@ -13,6 +12,7 @@ import timeRoutes from './routes/timeRoutes.js';
 import groupRoutes from './routes/groupRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
 import vehicleRoutes from './routes/vehicleRoutes.js';
+import { initSocket } from './socket.js';
 // Cargar variables de entorno
 dotenv.config();
 
@@ -28,15 +28,8 @@ const httpServer = createServer(app);
 // rate limiting. Nivel 1 = confiar solo en el primer proxy.
 app.set('trust proxy', 1);
 
-// Socket.io con configuración CORS
-const io = new SocketIOServer(httpServer, {
-  cors: {
-    origin: [process.env.WEB_URL, process.env.MOBILE_URL],
-    methods: ['GET', 'POST'],
-    credentials: true,
-  },
-  transports: ['websocket', 'polling'],
-});
+// Socket.io (auth JWT + rooms de grupo) — ver src/socket.js
+const io = initSocket(httpServer);
 
 // Middleware de seguridad y parseo
 app.use(helmet());
@@ -82,48 +75,6 @@ app.use('/api/v1/profile', profileRoutes);
 app.use('/api/v1/vehicles', vehicleRoutes);
 app.get('/api/v1/ping', (req, res) => {
   res.json({ message: 'pong', timestamp: new Date().toISOString() });
-});
-
-// Socket.io connection handling
-io.on('connection', (socket) => {
-  console.log(`✓ Cliente conectado: ${socket.id}`);
-
-  // User joins a group chat room
-  socket.on('join_group', (groupId, userId) => {
-    const room = `group_${groupId}`;
-    socket.join(room);
-    console.log(`  ${socket.id} unido a ${room}`);
-    
-    // Notificar al grupo que alguien se unió
-    io.to(room).emit('user_joined', {
-      userId,
-      timestamp: new Date().toISOString(),
-    });
-  });
-
-  // Manejar mensajes (los detalles de cifrado y DB se hacen en services)
-  socket.on('message', (data) => {
-    console.log(`  Mensaje en ${data.groupId}: ${data.content.substring(0, 50)}...`);
-    const room = `group_${data.groupId}`;
-    io.to(room).emit('message_received', data);
-  });
-
-  // User leaves a group
-  socket.on('leave_group', (groupId) => {
-    const room = `group_${groupId}`;
-    socket.leave(room);
-    console.log(`  ${socket.id} salió de ${room}`);
-  });
-
-  // Handle disconnect
-  socket.on('disconnect', () => {
-    console.log(`✗ Cliente desconectado: ${socket.id}`);
-  });
-
-  // Error handling
-  socket.on('error', (error) => {
-    console.error(`Error en socket ${socket.id}:`, error);
-  });
 });
 
 // Error handling middleware

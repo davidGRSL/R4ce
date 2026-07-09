@@ -59,9 +59,11 @@ web/src/
 
 ## Estado actual y pendientes
 
-Implementado: auth completa + rate limiting (login/register), CRUD tramos + favoritos + cercanos, social fase 1 (likes, vistas con dedupe Redis, sección Descubrir con orden por popularidad, badges por umbral en `web/src/lib/social.js`), tiempos + rankings, grupos + miembros + invite codes, perfil + avatar, vehículos + garaje 3D, Live timing GPS.
+Implementado: auth completa + rate limiting (login/register), CRUD tramos + favoritos + cercanos, social fase 1 (likes, vistas con dedupe Redis, sección Descubrir con orden por popularidad, badges por umbral en `web/src/lib/social.js`), tiempos + rankings (pestaña dentro de Tramos; `/rankings` redirige a `/stages?tab=rankings`), grupos + miembros + invite codes, **chat de grupos completo** (mensajes cifrados AES-256-GCM en reposo — `utils/messageCrypto.js`, clave por grupo derivada de `CHAT_MASTER_KEY` vía HKDF; media imagen/vídeo/audio vía storage; notas de voz con MediaRecorder; Socket.io con auth JWT y rooms por grupo en `src/socket.js`; soft delete por autor o admin), perfil + avatar, vehículos + garaje 3D, Live timing GPS.
 
-Pendiente (ver docs/ROADMAP.md): comentarios en tramos (fase 2 social, diseño decidido), verificación de email (schema listo, flujo no), chat de grupos en frontend (Socket.io básico en backend, sin persistencia de mensajes), app móvil nativa, vista `user_stats` con cálculo de km incorrecto (usar `ST_Length(geography(route_line))`), CORS con `WEB_URL`/`MOBILE_URL` sin pasar al contenedor en docker-compose.
+Nota chat: el envío persiste por REST (`POST /groups/:id/messages[/media]`) y el backend emite `group:message` / `group:message_deleted` / `group:member_change` / `group:typing` a la room. Migración de schema en `db/migrations/002_group_chat.sql` (media_url, media_type).
+
+Pendiente (ver docs/ROADMAP.md): comentarios en tramos (fase 2 social, diseño decidido), verificación de email (schema listo, flujo no), app móvil nativa, vista `user_stats` con cálculo de km incorrecto (usar `ST_Length(geography(route_line))`).
 
 ## Testing
 

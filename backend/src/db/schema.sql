@@ -226,3 +226,12 @@ CREATE INDEX IF NOT EXISTS idx_stage_likes_stage ON stage_likes(stage_id);
 
 -- Contador de vistas del detalle (dedupe por usuario/IP vía Redis, 6h)
 ALTER TABLE stages ADD COLUMN IF NOT EXISTS view_count INT NOT NULL DEFAULT 0;
+
+-- ═══════════════════════════════════════════════
+-- Migración 002: chat de grupos con media
+-- (ver migrations/002_group_chat.sql para contenedores existentes)
+-- ═══════════════════════════════════════════════
+
+-- Media adjunta al mensaje (imagen / vídeo / audio)
+ALTER TABLE group_messages ADD COLUMN IF NOT EXISTS media_url  TEXT;
+ALTER TABLE group_messages ADD COLUMN IF NOT EXISTS media_type VARCHAR(50);

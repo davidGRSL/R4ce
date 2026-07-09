@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { saveSession, isAuthenticated } from '../lib/auth.js';
 
@@ -112,7 +112,8 @@ export default function Login() {
           </button>
 
           <p className="text-xs text-ink/50 font-mono">
-            ¿Aún no tienes cuenta? Regístrate desde la app móvil.
+            ¿Aún no tienes cuenta?{' '}
+            <Link to="/register" className="text-rally hover:underline">Crea una aquí</Link>
           </p>
         </form>
       </div>

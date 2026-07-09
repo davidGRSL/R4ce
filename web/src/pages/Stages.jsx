@@ -1,15 +1,67 @@
 import { useEffect, useState, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   ChevronLeft, ChevronRight, Plus, Star, MapPin, Gauge,
-  Heart, Eye, Users, Flame, Clock, User,
+  Heart, Eye, Users, Flame, Clock, User, Compass, Trophy,
 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { formatDuration } from '../lib/format.js';
 import MyStagesPanel from '../components/MyStagesPanel.jsx';
 import StageBadges from '../components/StageBadges.jsx';
+import RankingsPanel from '../components/RankingsPanel.jsx';
 
 export default function Stages() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get('tab') === 'rankings' ? 'rankings' : 'explore';
+
+  function setTab(next) {
+    setSearchParams(next === 'rankings' ? { tab: 'rankings' } : {}, { replace: true });
+  }
+
+  return (
+    <div className="p-4 md:p-8 lg:p-12 max-w-6xl">
+      {/* Pestañas Explorar | Rankings */}
+      <div className="flex border border-ink/20 w-fit mb-8">
+        <TabButton active={tab === 'explore'} onClick={() => setTab('explore')} icon={Compass}>
+          Explorar
+        </TabButton>
+        <TabButton active={tab === 'rankings'} onClick={() => setTab('rankings')} icon={Trophy}>
+          Rankings
+        </TabButton>
+      </div>
+
+      {tab === 'rankings' ? (
+        <>
+          <header className="mb-6 md:mb-10">
+            <p className="eyebrow">Clasificaciones</p>
+            <h1 className="text-3xl md:text-5xl font-bold mt-1">Rankings</h1>
+            <p className="text-ink/60 mt-3 max-w-lg text-sm md:text-base">
+              Tiempos oficiales por tramo. Solo se incluyen tiempos públicos —
+              el mejor tiempo de cada piloto cuenta para el ranking.
+            </p>
+          </header>
+          <RankingsPanel />
+        </>
+      ) : (
+        <ExploreTab />
+      )}
+    </div>
+  );
+}
+
+function TabButton({ active, onClick, icon: Icon, children }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 px-5 py-2.5 text-xs font-mono uppercase tracking-widest transition-colors
+                  ${active ? 'bg-ink text-paper' : 'text-ink/60 hover:text-ink'}`}
+    >
+      <Icon size={13} /> {children}
+    </button>
+  );
+}
+
+function ExploreTab() {
   const [favorites, setFavorites] = useState([]);
   const [loading,   setLoading]   = useState(true);
   const carousel = useRef(null);
@@ -56,7 +108,7 @@ export default function Stages() {
   }
 
   return (
-    <div className="p-4 md:p-8 lg:p-12 max-w-6xl">
+    <div>
       {/* Header + Crea tu circuito lado a lado */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8 items-stretch">
         {/* Izquierda: header */}

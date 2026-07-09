@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useNavigate, Outlet } from 'react-router-dom';
-import { LogOut, LayoutGrid, Trophy, Route as RouteIcon, Radar, User } from 'lucide-react';
+import { LogOut, LayoutGrid, UsersRound, Route as RouteIcon, Radar, User } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { clearTokens, getRefreshToken, getUser } from '../lib/auth.js';
 
@@ -30,7 +30,7 @@ export default function Layout() {
     { to: '/',         label: 'Dashboard', icon: LayoutGrid },
     { to: '/live',     label: 'Live',      icon: Radar },
     { to: '/stages',   label: 'Tramos',    icon: RouteIcon },
-    { to: '/rankings', label: 'Rankings',  icon: Trophy },
+    { to: '/groups',   label: 'Grupos',    icon: UsersRound },
   ];
 
   const displayName = profile?.pseudonym || user?.pseudonym || user?.username || 'Piloto';

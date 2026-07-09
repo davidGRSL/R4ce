@@ -179,6 +179,13 @@ export default function StageCreate() {
         await api.post(`/stages/${stageId}/groups`, { groupIds: form.groupIds });
       }
 
+      // Un tramo "público" debe publicarse para aparecer en Descubrir:
+      // el backend distingue visibility='public' de is_published=true y
+      // listPublicStages exige ambos. Sin publicar, nadie más lo ve.
+      if (form.visibility === 'public') {
+        await api.post(`/stages/${stageId}/publish`, { publish: true });
+      }
+
       navigate('/stages');
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Error al guardar el tramo');
