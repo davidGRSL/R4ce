@@ -75,3 +75,26 @@ model-viewer {
   --poster-color: transparent;
   background: #121212;
 }
+
+/* ─────────────────────────────────────────────
+   Visor de trazada (SilhouetteViewer)
+   Ocultación de marcadores por CSS. Doble selector:
+   - [data-part=…]  → siluetas nuevas (silhouette.js las agrupa)
+   - atributos fill / font-size → siluetas antiguas ya guardadas en BD
+   ───────────────────────────────────────────── */
+.sil-viewer.hide-start svg [data-part='start'],
+.sil-viewer.hide-start svg circle[fill='#fcbf49'] {
+  display: none;
+}
+
+.sil-viewer.hide-end svg [data-part='end'],
+.sil-viewer.hide-end svg circle[fill='#386641'],
+.sil-viewer.hide-end svg text[font-size='10'] {
+  display: none;
+}
+
+.sil-viewer.hide-cps svg [data-part='cps'],
+.sil-viewer.hide-cps svg circle[fill='#121212'],
+.sil-viewer.hide-cps svg text[font-size='11'] {
+  display: none;
+}

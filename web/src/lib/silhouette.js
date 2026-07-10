@@ -104,13 +104,21 @@ function buildSvg(linePts, markerPts, isRoad) {
   const s0 = marks[0];
   const sN = marks[marks.length - 1];
 
+  // Los marcadores van agrupados con data-part para que el visor
+  // (SilhouetteViewer) pueda mostrarlos/ocultarlos por CSS.
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" fill="none">
   <path d="${d}" stroke="#f2f1ec" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="${d}" stroke="#e63946" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="${r(s0[0])}" cy="${r(s0[1])}" r="11" fill="#fcbf49" stroke="#121212" stroke-width="3"/>
-  <circle cx="${r(sN[0])}" cy="${r(sN[1])}" r="11" fill="#386641" stroke="#121212" stroke-width="3"/>
-  <text x="${r(sN[0])}" y="${r(sN[1])}" text-anchor="middle" dominant-baseline="central"
-        font-family="monospace" font-size="10" font-weight="bold" fill="#f2f1ec">🏁</text>${cpDots}
+  <g data-part="start">
+    <circle cx="${r(s0[0])}" cy="${r(s0[1])}" r="11" fill="#fcbf49" stroke="#121212" stroke-width="3"/>
+  </g>
+  <g data-part="end">
+    <circle cx="${r(sN[0])}" cy="${r(sN[1])}" r="11" fill="#386641" stroke="#121212" stroke-width="3"/>
+    <text x="${r(sN[0])}" y="${r(sN[1])}" text-anchor="middle" dominant-baseline="central"
+          font-family="monospace" font-size="10" font-weight="bold" fill="#f2f1ec">🏁</text>
+  </g>
+  <g data-part="cps">${cpDots}
+  </g>
 </svg>`;
 }
 

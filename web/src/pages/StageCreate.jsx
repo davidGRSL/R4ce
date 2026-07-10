@@ -6,6 +6,7 @@ import { generateSilhouette } from '../lib/silhouette.js';
 import { reverseGeocode } from '../lib/geocode.js';
 import MapPicker from "../components/MapPicker.jsx";
 import PlaceSearch from "../components/PlaceSearch.jsx";
+import SilhouetteViewer from "../components/SilhouetteViewer.jsx";
 
 const EMPTY = {
   name: '',
@@ -398,10 +399,7 @@ export default function StageCreate() {
 
             {silhouette ? (
               <div className="border border-ink/10">
-                <div
-                  className="p-2 bg-paper [&_svg]:w-full [&_svg]:h-auto"
-                  dangerouslySetInnerHTML={{ __html: silhouette }}
-                />
+                <SilhouetteViewer svg={silhouette} className="bg-paper border-0" />
                 <div className="flex border-t border-ink/10">
                   <button
                     type="button"

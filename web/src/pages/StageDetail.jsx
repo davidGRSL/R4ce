@@ -10,6 +10,7 @@ import { api } from '../lib/api.js';
 import { formatDuration, formatDate, formatGap } from '../lib/format.js';
 import { getUser } from '../lib/auth.js';
 import StageBadges from '../components/StageBadges.jsx';
+import SilhouetteViewer from '../components/SilhouetteViewer.jsx';
 
 // Iconos Leaflet
 function makeIcon(color) {
@@ -344,10 +345,7 @@ export default function StageDetail() {
           {stage.silhouetteSvg && (
             <div className="mt-8">
               <p className="eyebrow mb-3">Trazada</p>
-              <div
-                className="border border-ink/10 p-3 bg-paper [&_svg]:w-full [&_svg]:h-auto"
-                dangerouslySetInnerHTML={{ __html: stage.silhouetteSvg }}
-              />
+              <SilhouetteViewer svg={stage.silhouetteSvg} className="bg-paper" />
             </div>
           )}
         </section>

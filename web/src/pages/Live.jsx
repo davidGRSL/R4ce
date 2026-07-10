@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import {
   Radar, Play, Square, MapPin, Volume2, VolumeX, Trophy, User,
-  Flag, TimerReset, CheckCircle2, XCircle, Navigation, Save,
+  Flag, TimerReset, CheckCircle2, XCircle, Navigation, Save, CloudOff, History,
 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { distanceM, formatDistance, speedKmh } from '../lib/geo.js';
@@ -12,6 +12,10 @@ import {
   getCompareMode, setCompareMode,
   getVoiceEnabled, setVoiceEnabled,
 } from '../lib/settings.js';
+import {
+  saveRun, loadRun, clearRun,
+  queueTime, flushPendingTimes, pendingTimesCount,
+} from '../lib/liveSession.js';
 
 // ── Radios de disparo (metros) ────────────────────────────
 const NOTIFY_DIST   = 500;  // avisar de tramo cercano
@@ -38,6 +42,8 @@ export default function Live() {
   const [visibility, setVisibility] = useState('public');
   const [compareMode, setCompareModeState] = useState(getCompareMode());
   const [voiceOn, setVoiceOn]   = useState(getVoiceEnabled());
+  const [resumeRun, setResumeRun] = useState(null);   // carrera guardada para reanudar
+  const [pendingCount, setPendingCount] = useState(0); // tiempos en cola offline
 
   // ── refs para leer estado fresco dentro del callback del GPS ──
   const phaseRef     = useRef(phase);
@@ -54,9 +60,28 @@ export default function Live() {
   const watchIdRef   = useRef(null);
   const wakeLockRef  = useRef(null);
   const voiceRef     = useRef(voiceOn);
+  const saveStateRef = useRef('pending');
+  const lastPersistRef = useRef(0);
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => { voiceRef.current = voiceOn; }, [voiceOn]);
+  useEffect(() => { saveStateRef.current = saveState; }, [saveState]);
+
+  // ── Persistencia de la carrera (sobrevive a recargas y cierres) ──
+  function persistRun(phaseOverride) {
+    const ph = phaseOverride ?? phaseRef.current;
+    if (!stageRef.current || !['armed', 'ready', 'running', 'finished'].includes(ph)) return;
+    saveRun({
+      phase:     ph,
+      stage:     stageRef.current,
+      reference: referenceRef.current,
+      startTs:   startTsRef.current,
+      splits:    splitsRef.current,
+      track:     trackRef.current,
+      maxSpeed:  maxSpeedRef.current,
+      nextCp:    nextCpRef.current,
+    });
+  }
 
   const say = useCallback((text) => { if (voiceRef.current) speak(text); }, []);
 
@@ -159,6 +184,7 @@ export default function Live() {
       const d = distanceM(coord, s.start.coord);
       if (d <= START_ZONE) {
         setPhase('ready');
+        persistRun('ready');
         say('En línea de salida. El crono arrancará al salir.');
       }
       return;
@@ -175,6 +201,7 @@ export default function Live() {
         nextCpRef.current = 0;
         recordSplit(0, 0, 'Salida');
         setPhase('running');
+        persistRun('running');
         say('¡Salida!');
       }
       return;
@@ -195,6 +222,7 @@ export default function Live() {
         if (d <= CP_RADIUS) {
           nextCpRef.current = nextCp + 1;
           recordSplit(nextCp + 1, ms, cps[nextCp].name || `Punto ${nextCp + 1}`);
+          persistRun('running');
         }
       }
 
@@ -205,9 +233,18 @@ export default function Live() {
           recordSplit(cps.length + 1, ms, 'Meta');
           setElapsed(ms);
           setPhase('finished');
+          persistRun('finished');
           releaseWakeLock();
           announceFinish(ms);
+          return;
         }
+      }
+
+      // Persistencia periódica del track (máx. cada 3 s)
+      const now = Date.now();
+      if (now - lastPersistRef.current > 3000) {
+        lastPersistRef.current = now;
+        persistRun('running');
       }
     }
   }
@@ -225,19 +262,25 @@ export default function Live() {
   }
 
   // ── Arrancar / parar la vigilancia GPS ──
-  async function startScanning() {
+  async function startWatch() {
     if (!navigator.geolocation) {
       setGpsError('Este dispositivo no tiene GPS disponible en el navegador.');
-      return;
+      return false;
     }
     try { await Notification.requestPermission(); } catch { /* opcional */ }
     await acquireWakeLock();
 
+    if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current);
     watchIdRef.current = navigator.geolocation.watchPosition(
       onPosition,
       (err) => setGpsError(err.message || 'No se pudo obtener la posición GPS'),
       { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
     );
+    return true;
+  }
+
+  async function startScanning() {
+    if (!(await startWatch())) return;
     setPhase('scanning');
     say('Detección de tramos activada.');
   }
@@ -246,6 +289,7 @@ export default function Live() {
     if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current);
     watchIdRef.current = null;
     releaseWakeLock();
+    clearRun(); // participación descartada a propósito: no ofrecer reanudar
     setPhase('idle');
     setCandidate(null);
     setStage(null);
@@ -259,6 +303,89 @@ export default function Live() {
     releaseWakeLock();
     window.speechSynthesis?.cancel();
   }, []);
+
+  // ── Al montar: reintentar tiempos encolados y detectar carrera pendiente ──
+  useEffect(() => {
+    flushPendingTimes()
+      .then(({ remaining }) => setPendingCount(remaining))
+      .catch(() => setPendingCount(pendingTimesCount()));
+    const saved = loadRun();
+    if (saved) setResumeRun(saved);
+  }, []);
+
+  // ── Volver la conexión: vaciar la cola de tiempos ──
+  useEffect(() => {
+    async function onOnline() {
+      try {
+        const { remaining } = await flushPendingTimes();
+        setPendingCount(remaining);
+        if (remaining === 0 && saveStateRef.current === 'queued') setSaveState('saved');
+      } catch { /* siguiente intento */ }
+    }
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, []);
+
+  // ── Pantalla apagada/encendida: re-adquirir el wake lock (se pierde al ocultar) ──
+  useEffect(() => {
+    function onVisibility() {
+      if (document.visibilityState === 'visible' &&
+          ['scanning', 'armed', 'ready', 'running'].includes(phaseRef.current)) {
+        acquireWakeLock();
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+
+  // ── Aviso antes de cerrar/recargar con una carrera activa ──
+  useEffect(() => {
+    function onBeforeUnload(e) {
+      if (['armed', 'ready', 'running'].includes(phaseRef.current)) {
+        e.preventDefault();
+        e.returnValue = ''; // requerido por Chrome para mostrar el diálogo
+      }
+    }
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, []);
+
+  // ── Reanudar una participación guardada ──
+  async function resumeSavedRun() {
+    const run = resumeRun;
+    if (!run) return;
+    setResumeRun(null);
+
+    stageRef.current     = run.stage;
+    referenceRef.current = run.reference ?? null;
+    splitsRef.current    = run.splits ?? [];
+    trackRef.current     = run.track ?? [];
+    maxSpeedRef.current  = run.maxSpeed ?? 0;
+    nextCpRef.current    = run.nextCp ?? 0;
+    startTsRef.current   = run.startTs ?? null;
+
+    setStage(run.stage);
+    setReference(referenceRef.current);
+    setSplits(splitsRef.current);
+    setCandidate(null);
+    setSaveState('pending');
+
+    if (run.phase === 'finished') {
+      // Cruzó la meta pero no llegó a guardar: directo al panel de resultado
+      const totalMs = splitsRef.current[splitsRef.current.length - 1]?.ms ?? 0;
+      setElapsed(totalMs);
+      setPhase('finished');
+    } else {
+      setPhase(run.phase);
+      await startWatch();
+      say(`Participación en ${run.stage.name} reanudada.`);
+    }
+  }
+
+  function discardSavedRun() {
+    clearRun();
+    setResumeRun(null);
+  }
 
   // ── Participar en un tramo ──
   const participate = useCallback(async (stageId) => {
@@ -297,6 +424,7 @@ export default function Live() {
       setElapsed(0);
       nextCpRef.current = 0;
       setPhase('armed');
+      persistRun('armed');
       await acquireWakeLock();
       say(`Participando en ${st.name}. Dirígete a la salida.`);
     } catch {
@@ -322,29 +450,43 @@ export default function Live() {
   }, [phase]);
 
   // ── Guardar el tiempo al terminar ──
+  // Sin cobertura, el tiempo se encola en el dispositivo y se reenvía
+  // automáticamente cuando vuelva la conexión (evento 'online' o al
+  // volver a abrir Live).
   async function saveTime() {
     setSaveState('saving');
-    try {
-      const track = trackRef.current;
-      const durationMs = splitsRef.current[splitsRef.current.length - 1]?.ms ?? elapsed;
-      let dist = 0;
-      for (let i = 1; i < track.length; i++) {
-        dist += distanceM([track[i - 1].lat, track[i - 1].lng], [track[i].lat, track[i].lng]);
-      }
-      const avgSpeed = durationMs > 0 ? (dist / 1000) / (durationMs / 3600000) : null;
+    const track = trackRef.current;
+    const durationMs = splitsRef.current[splitsRef.current.length - 1]?.ms ?? elapsed;
+    let dist = 0;
+    for (let i = 1; i < track.length; i++) {
+      dist += distanceM([track[i - 1].lat, track[i - 1].lng], [track[i].lat, track[i].lng]);
+    }
+    const avgSpeed = durationMs > 0 ? (dist / 1000) / (durationMs / 3600000) : null;
 
-      await api.post('/times', {
-        stageId: stage.id,
-        durationMs,
-        visibility,
-        splits: splitsRef.current,
-        track,
-        maxSpeed: maxSpeedRef.current || null,
-        avgSpeed: avgSpeed ? Math.round(avgSpeed * 10) / 10 : null,
-      });
+    const payload = {
+      stageId: stage.id,
+      durationMs,
+      visibility,
+      splits: splitsRef.current,
+      track,
+      maxSpeed: maxSpeedRef.current || null,
+      avgSpeed: avgSpeed ? Math.round(avgSpeed * 10) / 10 : null,
+    };
+
+    try {
+      await api.post('/times', payload);
       setSaveState('saved');
-    } catch {
-      setSaveState('error');
+      clearRun();
+    } catch (err) {
+      if (!err.response) {
+        // Error de red (sin cobertura): encolar y dar por resuelto
+        queueTime(payload);
+        setPendingCount(pendingTimesCount());
+        setSaveState('queued');
+        clearRun();
+      } else {
+        setSaveState('error');
+      }
     }
   }
 
@@ -393,6 +535,45 @@ export default function Live() {
 
       {gpsError && (
         <div className="border border-rally/40 bg-rally/5 text-rally px-4 py-3 text-sm">{gpsError}</div>
+      )}
+
+      {/* Tiempos pendientes de enviar (guardados sin cobertura) */}
+      {pendingCount > 0 && (
+        <div className="border border-signal/40 bg-signal/5 px-4 py-3 text-sm flex items-center gap-2">
+          <CloudOff size={15} className="text-signal shrink-0" />
+          <span>
+            {pendingCount === 1 ? 'Hay 1 tiempo guardado' : `Hay ${pendingCount} tiempos guardados`} en
+            este dispositivo pendiente{pendingCount > 1 ? 's' : ''} de enviar. Se enviará
+            {pendingCount > 1 ? 'n' : ''} automáticamente al recuperar la conexión.
+          </span>
+        </div>
+      )}
+
+      {/* Participación interrumpida (recarga, cierre, batería…) */}
+      {resumeRun && phase === 'idle' && (
+        <div className="border-2 border-signal bg-signal/5 p-5 space-y-3">
+          <div className="flex items-start gap-3">
+            <History size={20} className="text-signal shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-lg leading-tight">Participación interrumpida</p>
+              <p className="text-sm text-ink/60">
+                {resumeRun.stage.name}
+                {resumeRun.phase === 'running' && resumeRun.startTs &&
+                  ` · en carrera (${formatDuration(Date.now() - resumeRun.startTs)})`}
+                {resumeRun.phase === 'finished' && ' · meta cruzada, tiempo sin guardar'}
+                {(resumeRun.phase === 'armed' || resumeRun.phase === 'ready') && ' · esperando salida'}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={resumeSavedRun} className="btn flex-1 py-3 flex items-center justify-center gap-2">
+              <Play size={16} /> Reanudar
+            </button>
+            <button onClick={discardSavedRun} className="px-4 border border-ink/20 text-ink/60 text-sm">
+              Descartar
+            </button>
+          </div>
+        </div>
       )}
 
       {/* ── IDLE ── */}
@@ -542,11 +723,14 @@ export default function Live() {
           visibility={visibility}
           setVisibility={setVisibility}
           onSave={saveTime}
-          onRestart={() => {
+          onRestart={async () => {
             setSplits([]); splitsRef.current = [];
             setElapsed(0); nextCpRef.current = 0;
             setSaveState('pending');
             setPhase('armed');
+            persistRun('armed');
+            // Si venimos de una reanudación en 'finished', el GPS no está activo
+            if (watchIdRef.current == null) await startWatch();
           }}
           onExit={stopEverything}
         />
@@ -649,6 +833,14 @@ function FinishedPanel({
         {saveState === 'saved' ? (
           <p className="text-sm text-forest font-medium flex items-center gap-2">
             <CheckCircle2 size={16} /> Tiempo guardado
+          </p>
+        ) : saveState === 'queued' ? (
+          <p className="text-sm text-signal font-medium flex items-start gap-2">
+            <CloudOff size={16} className="shrink-0 mt-0.5" />
+            <span>
+              Sin cobertura — el tiempo está guardado en este dispositivo y se
+              enviará automáticamente al recuperar la conexión.
+            </span>
           </p>
         ) : (
           <>
