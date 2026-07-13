@@ -33,7 +33,7 @@ async function api(method, path, body, token) {
 
 async function registerOrLogin(username, password, pseudonym) {
   try {
-    const data = await api('POST', '/auth/register', { username, password, pseudonym });
+    const data = await api('POST', '/auth/register', { username, password, pseudonym, tosAccepted: true });
     if (data.accessToken) {
       console.log(`  ✓ Registrado: ${username}`);
       return data;

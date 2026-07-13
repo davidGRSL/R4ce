@@ -3,10 +3,12 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, UsersRound, Crown, Shield, Send, Paperclip, Mic, Square,
   X, Trash2, Copy, RefreshCw, Check, LogOut, Pencil, ChevronUp, Settings,
+  Flag, ShieldOff,
 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { getSocket } from '../lib/socket.js';
 import { getUser } from '../lib/auth.js';
+import ReportDialog from '../components/ReportDialog.jsx';
 
 const ROLE_LABEL = { owner: 'Admin', moderator: 'Moderador', member: 'Miembro' };
 
@@ -31,6 +33,8 @@ export default function GroupDetail() {
   const [members,  setMembers]  = useState([]);
   const [error,    setError]    = useState(null);
   const [showPanel, setShowPanel] = useState(false);
+  const [reportTarget, setReportTarget] = useState(null); // { type, id, label }
+  const [blockedIds,   setBlockedIds]   = useState(new Set());
 
   // Mensajes
   const [messages,     setMessages]     = useState([]);
@@ -55,6 +59,29 @@ export default function GroupDetail() {
       console.error(err);
     }
   }, [id]);
+
+  const loadBlocked = useCallback(async () => {
+    try {
+      const { data } = await api.get('/users/blocked');
+      setBlockedIds(new Set((data.blocked || []).map((b) => b.userId)));
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
+
+  useEffect(() => { loadBlocked(); }, [loadBlocked]);
+
+  async function toggleBlock(member) {
+    const isBlocked = blockedIds.has(member.userId);
+    if (!isBlocked && !window.confirm(`¿Bloquear a ${member.pseudonym}? Dejarás de ver su contenido.`)) return;
+    try {
+      if (isBlocked) await api.delete(`/users/${member.userId}/block`);
+      else           await api.post(`/users/${member.userId}/block`);
+      loadBlocked();
+    } catch (err) {
+      alert(err.response?.data?.error?.message || 'No se pudo completar la acción');
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -284,8 +311,13 @@ export default function GroupDetail() {
                       msg={m}
                       own={m.userId === me?.id}
                       compact={compact}
+                      isBlocked={m.blocked || blockedIds.has(m.userId)}
                       canDelete={!m.deleted && (m.userId === me?.id || isAdmin)}
                       onDelete={() => deleteMessage(m.id)}
+                      onReport={() => setReportTarget({
+                        type: 'message', id: m.id,
+                        label: `Mensaje de ${m.pseudonym}${m.content ? `: "${m.content.slice(0, 60)}"` : ''}`,
+                      })}
                     />
                   </div>
                 );
@@ -307,10 +339,17 @@ export default function GroupDetail() {
             isOwner={isOwner}
             isAdmin={isAdmin}
             meId={me?.id}
+            blockedIds={blockedIds}
+            onToggleBlock={toggleBlock}
+            onReportUser={(m) => setReportTarget({ type: 'user', id: m.userId, label: `Usuario: ${m.pseudonym}` })}
             onLeftOrDeleted={() => navigate('/groups')}
           />
         )}
       </div>
+
+      {reportTarget && (
+        <ReportDialog target={reportTarget} onClose={() => setReportTarget(null)} />
+      )}
     </div>
   );
 }
@@ -318,7 +357,7 @@ export default function GroupDetail() {
 // ─────────────────────────────────────────────
 // Burbuja de mensaje
 // ─────────────────────────────────────────────
-function MessageBubble({ msg, own, compact, canDelete, onDelete }) {
+function MessageBubble({ msg, own, compact, isBlocked, canDelete, onDelete, onReport }) {
   const initials = (msg.pseudonym || '??')
     .split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 
@@ -349,6 +388,10 @@ function MessageBubble({ msg, own, compact, canDelete, onDelete }) {
                         ${msg.deleted ? 'italic opacity-60' : ''}`}>
           {msg.deleted ? (
             <span className="text-xs">Mensaje eliminado</span>
+          ) : isBlocked && !own ? (
+            <span className="text-xs italic opacity-60 inline-flex items-center gap-1.5">
+              <ShieldOff size={12} /> Mensaje de usuario bloqueado
+            </span>
           ) : (
             <>
               {msg.mediaUrl && msg.messageType === 'image' && (
@@ -366,15 +409,20 @@ function MessageBubble({ msg, own, compact, canDelete, onDelete }) {
             </>
           )}
 
-          {canDelete && (
-            <button
-              onClick={onDelete}
-              title="Eliminar mensaje"
-              className={`absolute top-1 hidden group-hover:block p-1 transition-colors
-                          ${own ? '-left-8 text-ink/30 hover:text-rally' : '-right-8 text-ink/30 hover:text-rally'}`}
-            >
-              <Trash2 size={13} />
-            </button>
+          {!msg.deleted && (
+            <span className={`absolute top-1 hidden group-hover:flex items-center gap-0.5
+                             ${own ? '-left-14 flex-row-reverse' : '-right-14'}`}>
+              {canDelete && (
+                <button onClick={onDelete} title="Eliminar mensaje" className="p-1 text-ink/30 hover:text-rally transition-colors">
+                  <Trash2 size={13} />
+                </button>
+              )}
+              {!own && (
+                <button onClick={onReport} title="Denunciar mensaje" className="p-1 text-ink/30 hover:text-rally transition-colors">
+                  <Flag size={13} />
+                </button>
+              )}
+            </span>
           )}
         </div>
       </div>
@@ -612,7 +660,10 @@ function Composer({ groupId, onSent, pseudonym }) {
 // ─────────────────────────────────────────────
 // Panel de miembros + administración
 // ─────────────────────────────────────────────
-function MembersPanel({ group, setGroup, members, reloadMembers, isOwner, isAdmin, meId, onLeftOrDeleted }) {
+function MembersPanel({
+  group, setGroup, members, reloadMembers, isOwner, isAdmin, meId,
+  blockedIds, onToggleBlock, onReportUser, onLeftOrDeleted,
+}) {
   const [copied,       setCopied]       = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [editing,      setEditing]      = useState(false);
@@ -796,24 +847,36 @@ function MembersPanel({ group, setGroup, members, reloadMembers, isOwner, isAdmi
                 {ROLE_LABEL[m.role]}
               </span>
 
-              {/* Acciones de administración */}
-              {m.userId !== meId && m.role !== 'owner' && (isOwner || (isAdmin && m.role === 'member')) && (
+              {/* Acciones: moderación de grupo + denunciar/bloquear */}
+              {m.userId !== meId && (
                 <span className="hidden group-hover/member:flex items-center gap-1">
-                  {isOwner && m.role === 'member' && (
+                  {m.role !== 'owner' && isOwner && m.role === 'member' && (
                     <button onClick={() => changeRole(m.userId, 'moderator')}
                       className="p-1 text-ink/40 hover:text-forest" title="Hacer moderador">
                       <Shield size={13} />
                     </button>
                   )}
-                  {isOwner && m.role === 'moderator' && (
+                  {m.role !== 'owner' && isOwner && m.role === 'moderator' && (
                     <button onClick={() => changeRole(m.userId, 'member')}
                       className="p-1 text-ink/40 hover:text-ink" title="Quitar moderador">
                       <Shield size={13} className="opacity-40" />
                     </button>
                   )}
-                  <button onClick={() => kick(m)} className="p-1 text-ink/40 hover:text-rally" title="Expulsar">
-                    <X size={13} />
+                  <button onClick={() => onReportUser(m)} className="p-1 text-ink/40 hover:text-rally" title="Denunciar usuario">
+                    <Flag size={13} />
                   </button>
+                  <button
+                    onClick={() => onToggleBlock(m)}
+                    className={`p-1 hover:text-rally ${blockedIds.has(m.userId) ? 'text-rally' : 'text-ink/40'}`}
+                    title={blockedIds.has(m.userId) ? 'Desbloquear usuario' : 'Bloquear usuario'}
+                  >
+                    <ShieldOff size={13} />
+                  </button>
+                  {m.role !== 'owner' && (isOwner || (isAdmin && m.role === 'member')) && (
+                    <button onClick={() => kick(m)} className="p-1 text-ink/40 hover:text-rally" title="Expulsar">
+                      <X size={13} />
+                    </button>
+                  )}
                 </span>
               )}
             </li>

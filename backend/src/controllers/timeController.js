@@ -1,4 +1,5 @@
 import { query } from '../db/pool.js';
+import { notifyRecordIfBeaten } from '../utils/notify.js';
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -148,6 +149,9 @@ export async function recordTime(req, res) {
 
     if (visibility === 'public') {
       await upsertRanking(req.user.id, stageId, durationMs);
+      // Best-effort: aviso de récord a los participantes del tramo
+      notifyRecordIfBeaten({ stageId, timeId: time.id, durationMs, setterId: req.user.id })
+        .catch((e) => console.error('  [notify] record:', e.message));
     }
 
     await logAudit({ userId: req.user.id, action: 'time.record', resourceId: time.id, req });
@@ -306,14 +310,19 @@ export async function getStageRanking(req, res) {
     const countResult = await query(`SELECT COUNT(*) FROM time_rankings WHERE stage_id = $1`, [stageId]);
     const total = parseInt(countResult.rows[0].count);
 
+    // Excluir del ranking a usuarios bloqueados por el solicitante
     const result = await query(
       `SELECT tr.rank, tr.duration_ms, tr.created_at, u.id AS user_id, u.pseudonym
        FROM time_rankings tr
        LEFT JOIN users u ON u.id = tr.user_id
        WHERE tr.stage_id = $1
+         AND NOT EXISTS (
+           SELECT 1 FROM user_blocks ub
+           WHERE ub.blocker_id = $4 AND ub.blocked_id = tr.user_id
+         )
        ORDER BY tr.rank ASC
        LIMIT $2 OFFSET $3`,
-      [stageId, limit, offset]
+      [stageId, limit, offset, req.user?.id ?? null]
     );
 
     return res.json({

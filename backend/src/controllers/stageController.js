@@ -182,6 +182,15 @@ export async function listPublicStages(req, res) {
     const params     = [];
     let   pIdx       = 1;
 
+    // No mostrar tramos de usuarios bloqueados por el solicitante
+    if (req.user?.id) {
+      conditions.push(
+        `NOT EXISTS (SELECT 1 FROM user_blocks ub
+                     WHERE ub.blocker_id = $${pIdx++} AND ub.blocked_id = s.creator_id)`
+      );
+      params.push(req.user.id);
+    }
+
     if (difficulty) {
       conditions.push(`s.difficulty_level = $${pIdx++}`);
       params.push(difficulty);

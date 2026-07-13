@@ -1,9 +1,41 @@
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import { query } from '../db/pool.js';
 import { signAccessToken, generateRefreshToken, hashRefreshToken } from '../utils/jwt.js';
 import { validateUsername, validatePassword, validatePseudonym } from '../utils/validators.js';
+import { sendVerificationEmail } from '../utils/mailer.js';
 
 const BCRYPT_ROUNDS = 12;
+
+// Versión vigente de los términos de uso. Al cambiarla, los usuarios que
+// aceptaron una versión anterior verán el aviso de re-aceptación.
+export const TOS_VERSION = process.env.TOS_VERSION || '2026-07-11';
+
+// Solo se guarda el hash del email (privacidad por diseño)
+function hashEmail(email) {
+  return crypto.createHash('sha256').update(email.trim().toLowerCase()).digest('hex');
+}
+
+function isValidEmail(email) {
+  return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
+}
+
+// Crea el token de verificación y envía (o loguea) el enlace. Best-effort.
+async function createAndSendVerification(userId, email) {
+  const token     = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const expiresAt = new Date(Date.now() + 24 * 3600 * 1000);
+
+  // Un token vigente por usuario: se invalidan los anteriores
+  await query(`DELETE FROM email_verifications WHERE user_id = $1`, [userId]);
+  await query(
+    `INSERT INTO email_verifications (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+    [userId, tokenHash, expiresAt]
+  );
+
+  const base = process.env.WEB_URL || 'http://localhost:5173';
+  await sendVerificationEmail(email, `${base}/verify?token=${token}`);
+}
 
 // Inserta una fila en audit_log sin bloquear ni romper la respuesta si falla.
 async function logAudit({ userId, action, req }) {
@@ -23,6 +55,11 @@ function publicUser(row) {
     id: row.id,
     username: row.username,
     pseudonym: row.pseudonym,
+    role: row.role ?? 'user',
+    emailVerified: row.email_verified_at != null,
+    hasEmail: row.email_hash != null,
+    // El cliente muestra re-aceptación de términos si la versión cambió
+    needsTos: (row.tos_version ?? null) !== TOS_VERSION,
     createdAt: row.created_at,
   };
 }
@@ -36,7 +73,7 @@ function publicUser(row) {
  * cambiará a is_active = false + envío de link de confirmación.
  */
 export async function register(req, res) {
-  const { username, password, pseudonym } = req.body || {};
+  const { username, password, pseudonym, email, tosAccepted } = req.body || {};
 
   const errors = [
     validateUsername(username),
@@ -44,21 +81,36 @@ export async function register(req, res) {
     validatePseudonym(pseudonym),
   ].filter(Boolean);
 
+  // Aceptación de términos obligatoria (requisito de stores)
+  if (tosAccepted !== true) {
+    errors.push('Debes aceptar los términos de uso y la política de privacidad');
+  }
+  if (email != null && email !== '' && !isValidEmail(email)) {
+    errors.push('El email no es válido');
+  }
+
   if (errors.length > 0) {
     return res.status(400).json({ error: { message: errors.join('; '), status: 400 } });
   }
 
   try {
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    const emailHash = isValidEmail(email) ? hashEmail(email) : null;
 
     const result = await query(
-      `INSERT INTO users (username, password_hash, pseudonym, is_active)
-       VALUES ($1, $2, $3, true)
-       RETURNING id, username, pseudonym, created_at`,
-      [username, passwordHash, pseudonym || null]
+      `INSERT INTO users (username, password_hash, pseudonym, email_hash, is_active, tos_accepted_at, tos_version)
+       VALUES ($1, $2, $3, $4, true, NOW(), $5)
+       RETURNING id, username, pseudonym, role, email_hash, email_verified_at, tos_version, created_at`,
+      [username, passwordHash, pseudonym || null, emailHash, TOS_VERSION]
     );
 
     const user = result.rows[0];
+
+    // Verificación de email (best-effort: sin SMTP se loguea el enlace)
+    if (emailHash) {
+      createAndSendVerification(user.id, email)
+        .catch((e) => console.error('  [verify] no se pudo enviar:', e.message));
+    }
 
     // Auto-login tras registrarse: como la cuenta ya está activa,
     // no tiene sentido obligar a un segundo paso de login manual.
@@ -79,9 +131,9 @@ export async function register(req, res) {
     });
   } catch (err) {
     if (err.code === '23505') {
-      // unique_violation — username ya existe
+      // unique_violation — username o email ya existen
       return res.status(409).json({
-        error: { message: 'Ese nombre de usuario ya está en uso', status: 409 },
+        error: { message: 'Ese nombre de usuario o email ya está en uso', status: 409 },
       });
     }
     console.error('Error en register:', err);
@@ -109,7 +161,8 @@ export async function login(req, res) {
 
   try {
     const result = await query(
-      `SELECT id, username, password_hash, pseudonym, created_at, is_active
+      `SELECT id, username, password_hash, pseudonym, role, email_hash,
+              email_verified_at, tos_version, created_at, is_active
        FROM users WHERE username = $1`,
       [username]
     );
@@ -256,7 +309,9 @@ export async function logout(req, res) {
 export async function me(req, res) {
   try {
     const result = await query(
-      `SELECT id, username, pseudonym, created_at, is_active FROM users WHERE id = $1`,
+      `SELECT id, username, pseudonym, role, email_hash, email_verified_at,
+              tos_version, created_at, is_active
+       FROM users WHERE id = $1`,
       [req.user.id]
     );
     const user = result.rows[0];
@@ -266,6 +321,87 @@ export async function me(req, res) {
     return res.json({ user: publicUser(user) });
   } catch (err) {
     console.error('Error en me:', err);
+    return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
+  }
+}
+
+/**
+ * POST /api/v1/auth/verify
+ * body: { token }  — sin auth: el usuario puede abrir el enlace desde
+ * cualquier dispositivo. Marca email_verified_at.
+ */
+export async function verifyEmail(req, res) {
+  const { token } = req.body || {};
+  if (typeof token !== 'string' || token.length === 0) {
+    return res.status(400).json({ error: { message: 'token es obligatorio', status: 400 } });
+  }
+
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+  try {
+    const result = await query(
+      `SELECT user_id, expires_at FROM email_verifications WHERE token_hash = $1`,
+      [tokenHash]
+    );
+    const row = result.rows[0];
+    if (!row || new Date(row.expires_at) < new Date()) {
+      return res.status(400).json({ error: { message: 'Enlace inválido o caducado. Solicita uno nuevo desde tu perfil.', status: 400 } });
+    }
+
+    await query(`UPDATE users SET email_verified_at = NOW() WHERE id = $1`, [row.user_id]);
+    await query(`DELETE FROM email_verifications WHERE user_id = $1`, [row.user_id]);
+    await logAudit({ userId: row.user_id, action: 'user.email_verified', req });
+
+    return res.json({ message: 'Email verificado' });
+  } catch (err) {
+    console.error('Error en verifyEmail:', err);
+    return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
+  }
+}
+
+/**
+ * POST /api/v1/auth/email   (requireAuth)
+ * body: { email } — añade/cambia el email (solo se guarda el hash) y
+ * reenvía el enlace de verificación.
+ */
+export async function requestVerification(req, res) {
+  const { email } = req.body || {};
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ error: { message: 'El email no es válido', status: 400 } });
+  }
+
+  try {
+    await query(
+      `UPDATE users SET email_hash = $2, email_verified_at = NULL WHERE id = $1`,
+      [req.user.id, hashEmail(email)]
+    );
+    await createAndSendVerification(req.user.id, email);
+    await logAudit({ userId: req.user.id, action: 'user.email_change', req });
+
+    return res.json({ message: 'Te hemos enviado un enlace de verificación' });
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ error: { message: 'Ese email ya está en uso', status: 409 } });
+    }
+    console.error('Error en requestVerification:', err);
+    return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
+  }
+}
+
+/**
+ * POST /api/v1/auth/accept-tos   (requireAuth)
+ * Re-aceptación de los términos vigentes (tras un cambio de versión).
+ */
+export async function acceptTos(req, res) {
+  try {
+    await query(
+      `UPDATE users SET tos_accepted_at = NOW(), tos_version = $2 WHERE id = $1`,
+      [req.user.id, TOS_VERSION]
+    );
+    await logAudit({ userId: req.user.id, action: 'user.tos_accepted', req });
+    return res.json({ tosVersion: TOS_VERSION });
+  } catch (err) {
+    console.error('Error en acceptTos:', err);
     return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
   }
 }

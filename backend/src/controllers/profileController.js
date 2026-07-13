@@ -1,3 +1,4 @@
+import bcrypt from 'bcrypt';
 import { query } from '../db/pool.js';
 import { processAndStore, keyFromUrl } from '../middleware/upload.js';
 import { storage } from '../storage/index.js';
@@ -10,6 +11,10 @@ function publicProfile(row) {
     bio:       row.bio,
     location:  row.location,
     avatarUrl: row.avatar_url,
+    role:      row.role ?? 'user',
+    emailVerified:  row.email_verified_at != null,
+    hasEmail:       row.email_hash != null,
+    safetyAccepted: row.safety_accepted_at != null,
     createdAt: row.created_at,
   };
 }
@@ -21,7 +26,8 @@ function publicProfile(row) {
 export async function getProfile(req, res) {
   try {
     const userResult = await query(
-      `SELECT id, username, pseudonym, bio, location, avatar_url, created_at
+      `SELECT id, username, pseudonym, bio, location, avatar_url, role,
+              email_hash, email_verified_at, safety_accepted_at, created_at
        FROM users WHERE id = $1`,
       [req.user.id]
     );
@@ -143,6 +149,86 @@ export async function deleteAvatar(req, res) {
     return res.status(204).send();
   } catch (err) {
     console.error('Error en deleteAvatar:', err);
+    return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
+  }
+}
+
+// ─────────────────────────────────────────────
+// POST /api/v1/profile/accept-safety
+// Registra la aceptación del aviso de seguridad vial de Live.
+// ─────────────────────────────────────────────
+export async function acceptSafety(req, res) {
+  try {
+    await query(`UPDATE users SET safety_accepted_at = NOW() WHERE id = $1`, [req.user.id]);
+    return res.status(204).send();
+  } catch (err) {
+    console.error('Error en acceptSafety:', err);
+    return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
+  }
+}
+
+// ─────────────────────────────────────────────
+// DELETE /api/v1/profile
+// body: { password } — borrado de cuenta (requisito de stores).
+// Elimina la media del storage y luego la fila de users (el resto de
+// tablas cae por ON DELETE CASCADE, incluidos los grupos que posee).
+// ─────────────────────────────────────────────
+export async function deleteAccount(req, res) {
+  const { password } = req.body || {};
+
+  if (typeof password !== 'string' || password.length === 0) {
+    return res.status(400).json({ error: { message: 'La contraseña es obligatoria para borrar la cuenta', status: 400 } });
+  }
+
+  try {
+    const userRes = await query(
+      `SELECT password_hash, avatar_url FROM users WHERE id = $1`,
+      [req.user.id]
+    );
+    const user = userRes.rows[0];
+    if (!user) {
+      return res.status(404).json({ error: { message: 'Usuario no encontrado', status: 404 } });
+    }
+
+    const matches = await bcrypt.compare(password, user.password_hash);
+    if (!matches) {
+      return res.status(403).json({ error: { message: 'Contraseña incorrecta', status: 403 } });
+    }
+
+    // Recopilar toda la media del usuario ANTES de borrar las filas
+    const [vehiclesRes, chatMediaRes] = await Promise.all([
+      query(`SELECT photo_url, model_url FROM vehicles WHERE user_id = $1`, [req.user.id]),
+      query(`SELECT media_url FROM group_messages WHERE user_id = $1 AND media_url IS NOT NULL`, [req.user.id]),
+    ]);
+
+    const urls = [
+      user.avatar_url,
+      ...vehiclesRes.rows.flatMap((v) => [v.photo_url, v.model_url]),
+      ...chatMediaRes.rows.map((m) => m.media_url),
+    ].filter(Boolean);
+
+    // Auditoría antes del borrado (después ya no existe el user_id)
+    try {
+      await query(
+        `INSERT INTO audit_log (user_id, action, resource_type, resource_id, ip_address)
+         VALUES ($1, 'user.delete_account', 'user', $1, $2)`,
+        [req.user.id, req.ip]
+      );
+    } catch { /* best-effort */ }
+
+    // Borrar la fila: cascada elimina tiempos, tramos, grupos propios,
+    // mensajes, vehículos, sesiones (refresh_tokens), favoritos, etc.
+    await query(`DELETE FROM users WHERE id = $1`, [req.user.id]);
+
+    // Media del storage (best-effort, tras confirmar el borrado en BD)
+    for (const url of urls) {
+      const key = keyFromUrl(url);
+      if (key) storage.delete(key).catch(() => {});
+    }
+
+    return res.status(204).send();
+  } catch (err) {
+    console.error('Error en deleteAccount:', err);
     return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
   }
 }

@@ -235,3 +235,75 @@ ALTER TABLE stages ADD COLUMN IF NOT EXISTS view_count INT NOT NULL DEFAULT 0;
 -- Media adjunta al mensaje (imagen / vídeo / audio)
 ALTER TABLE group_messages ADD COLUMN IF NOT EXISTS media_url  TEXT;
 ALTER TABLE group_messages ADD COLUMN IF NOT EXISTS media_type VARCHAR(50);
+
+-- ═══════════════════════════════════════════════
+-- Migración 003: sistema de notificaciones
+-- (ver migrations/003_notifications.sql para contenedores existentes)
+-- ═══════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type       VARCHAR(30) NOT NULL,   -- group_message, record, news, system
+  title      VARCHAR(200) NOT NULL,
+  body       TEXT,
+  data       JSONB,                  -- { groupId | stageId | url, count, ... }
+  read_at    TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user
+  ON notifications(user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_unread
+  ON notifications(user_id) WHERE read_at IS NULL;
+
+-- ═══════════════════════════════════════════════
+-- Migración 004: roles de usuario + moderación (Bloque A stores)
+-- (ver migrations/004_moderation_roles.sql para contenedores existentes)
+-- ═══════════════════════════════════════════════
+
+-- Rol global en la plataforma: admin | user | premium
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'user';
+
+-- Aceptación de términos + verificación de email + aviso de seguridad vial
+ALTER TABLE users ADD COLUMN IF NOT EXISTS tos_accepted_at   TIMESTAMP;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS tos_version       VARCHAR(20);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMP;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS safety_accepted_at TIMESTAMP;
+
+CREATE TABLE IF NOT EXISTS email_verifications (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash VARCHAR(255) UNIQUE NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_verif_user ON email_verifications(user_id);
+
+-- Denuncias de contenido (UGC)
+CREATE TABLE IF NOT EXISTS reports (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  reporter_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  target_type VARCHAR(20) NOT NULL,   -- message | stage | user
+  target_id   UUID NOT NULL,
+  reason      TEXT NOT NULL,
+  status      VARCHAR(20) NOT NULL DEFAULT 'pending',  -- pending | resolved | dismissed
+  resolution  TEXT,
+  resolved_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  resolved_at TIMESTAMP,
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status, created_at ASC);
+
+-- Bloqueo entre usuarios
+CREATE TABLE IF NOT EXISTS user_blocks (
+  blocker_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  blocked_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (blocker_id, blocked_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_blocks_blocker ON user_blocks(blocker_id);

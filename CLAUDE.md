@@ -63,7 +63,9 @@ Implementado: auth completa + rate limiting (login/register), CRUD tramos + favo
 
 Nota chat: el envío persiste por REST (`POST /groups/:id/messages[/media]`) y el backend emite `group:message` / `group:message_deleted` / `group:member_change` / `group:typing` a la room. Migración de schema en `db/migrations/002_group_chat.sql` (media_url, media_type).
 
-Pendiente (ver docs/ROADMAP.md): comentarios en tramos (fase 2 social, diseño decidido), verificación de email (schema listo, flujo no), app móvil nativa, vista `user_stats` con cálculo de km incorrecto (usar `ST_Length(geography(route_line))`).
+También implementado: **notificaciones** (tabla + `utils/notify.js`, rooms `user_<id>`, página Avisos con badge; migración 003), **Bloque A de stores completo** (migración 004): roles globales admin/user/premium (`requireRole`, bootstrap desde `ADMIN_USERNAMES`, panel `/admin` con cola de denuncias + gestión de roles + difusión de noticias), denuncias UGC (`POST /reports`), bloqueo entre usuarios (filtra chat/rankings/descubrir), borrado de cuenta (`DELETE /profile` + media), legales públicos (`/legal/terminos|privacidad` — BORRADOR pendiente de abogado), aceptación de ToS con versión (`TOS_VERSION`), verificación de email (nodemailer fail-soft: sin SMTP loguea el enlace; gate opcional `REQUIRE_EMAIL_VERIFICATION`), aviso de seguridad vial en Live.
+
+Pendiente (ver docs/ROADMAP.md y docs/PUBLICACION-STORES.md): comentarios en tramos (fase 2 social, diseño decidido), Capacitor + push nativo (Bloque B), producción (Bloque C), app móvil nativa, vista `user_stats` con cálculo de km incorrecto (usar `ST_Length(geography(route_line))`).
 
 ## Testing
 

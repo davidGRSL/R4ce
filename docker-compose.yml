@@ -58,6 +58,13 @@ services:
       # CORS (API y Socket.io)
       WEB_URL: ${WEB_URL:-http://localhost:5173}
       MOBILE_URL: ${MOBILE_URL}
+      # Bootstrap de administradores (rol admin al arrancar; luego se
+      # gestionan desde el panel /admin)
+      ADMIN_USERNAMES: ${ADMIN_USERNAMES:-}
+      # Versión vigente de los términos de uso (cambiarla fuerza re-aceptación)
+      TOS_VERSION: ${TOS_VERSION:-2026-07-11}
+      # true → publicar tramos/tiempos públicos exige email verificado
+      REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-false}
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
       SMTP_USER: ${SMTP_USER}

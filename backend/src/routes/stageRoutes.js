@@ -16,7 +16,7 @@ import {
   addLike,
   removeLike,
 } from '../controllers/stageController.js';
-import { requireAuth, optionalAuth } from '../middleware/auth.js';
+import { requireAuth, optionalAuth, requireVerifiedForPublic } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 
 const router = Router();
@@ -32,7 +32,8 @@ router.get('/near',              optionalAuth, listNearbyStages);
 router.get('/:id',               optionalAuth, getStage);
 router.put('/:id',               requireAuth,  updateStage);
 router.delete('/:id',            requireAuth,  deleteStage);
-router.post('/:id/publish',      requireAuth,  togglePublish);
+// (con REQUIRE_EMAIL_VERIFICATION=true, publicar exige email verificado)
+router.post('/:id/publish',      requireAuth,  requireVerifiedForPublic, togglePublish);
 router.post('/:id/groups',       requireAuth,  assignStageGroups);
 router.post('/:id/favorite',     requireAuth,  addFavorite);
 router.delete('/:id/favorite',   requireAuth,  removeFavorite);

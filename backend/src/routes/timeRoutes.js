@@ -8,7 +8,7 @@ import {
   updateTimeVisibility,
   deleteTime,
 } from '../controllers/timeController.js';
-import { requireAuth, optionalAuth } from '../middleware/auth.js';
+import { requireAuth, optionalAuth, requireVerifiedForPublic } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -23,7 +23,8 @@ router.get('/stage/:stageId/ranking',   optionalAuth,  getStageRanking);
 router.get('/:id',                      optionalAuth,  getTime);
 
 // Registrar tiempo al terminar la carrera
-router.post('/',                        requireAuth,   recordTime);
+// (con REQUIRE_EMAIL_VERIFICATION=true, los tiempos públicos exigen email verificado)
+router.post('/',                        requireAuth, requireVerifiedForPublic, recordTime);
 
 // Cambiar visibilidad de un tiempo ya registrado
 router.patch('/:id/visibility',         requireAuth,   updateTimeVisibility);

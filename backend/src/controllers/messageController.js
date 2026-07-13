@@ -13,6 +13,8 @@ import { encryptMessage, decryptMessage } from '../utils/messageCrypto.js';
 import { processAndStoreChatMedia, keyFromUrl } from '../middleware/upload.js';
 import { storage } from '../storage/index.js';
 import { emitToGroup } from '../socket.js';
+import { notifyGroupMessage } from '../utils/notify.js';
+import { blockedIdsOf } from './blockController.js';
 
 const MAX_CONTENT_LENGTH = 4000;
 
@@ -87,7 +89,18 @@ export async function listMessages(req, res) {
       params
     );
 
-    const messages = result.rows.map((r) => publicMessage(r, id)).reverse();
+    // Atenuar mensajes de usuarios bloqueados por el solicitante:
+    // se mantienen en el hilo (contexto) pero sin contenido ni media.
+    const blocked = await blockedIdsOf(req.user.id);
+    const messages = result.rows
+      .map((r) => {
+        const msg = publicMessage(r, id);
+        if (blocked.has(msg.userId) && !msg.deleted) {
+          return { ...msg, content: null, mediaUrl: null, mediaType: null, metadata: null, blocked: true };
+        }
+        return msg;
+      })
+      .reverse();
 
     return res.json({
       messages,
@@ -135,6 +148,9 @@ export async function sendMessage(req, res) {
     const message = publicMessage(full.rows[0], id);
 
     emitToGroup(id, 'group:message', message);
+    // Best-effort: sin contenido del mensaje (privacidad — va cifrado en BD)
+    notifyGroupMessage({ groupId: id, senderId: req.user.id, senderPseudonym: message.pseudonym })
+      .catch((e) => console.error('  [notify] group_message:', e.message));
 
     return res.status(201).json({ message });
   } catch (err) {
@@ -179,6 +195,8 @@ export async function sendMediaMessage(req, res) {
     const message = publicMessage(full.rows[0], id);
 
     emitToGroup(id, 'group:message', message);
+    notifyGroupMessage({ groupId: id, senderId: req.user.id, senderPseudonym: message.pseudonym })
+      .catch((e) => console.error('  [notify] group_message:', e.message));
 
     return res.status(201).json({ message });
   } catch (err) {

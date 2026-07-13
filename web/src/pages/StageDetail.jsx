@@ -11,6 +11,7 @@ import { formatDuration, formatDate, formatGap } from '../lib/format.js';
 import { getUser } from '../lib/auth.js';
 import StageBadges from '../components/StageBadges.jsx';
 import SilhouetteViewer from '../components/SilhouetteViewer.jsx';
+import ReportDialog from '../components/ReportDialog.jsx';
 
 // Iconos Leaflet
 function makeIcon(color) {
@@ -45,6 +46,7 @@ export default function StageDetail() {
   const [likesCount, setLikesCount] = useState(0);
   const [favorited,  setFavorited]  = useState(false);
   const [socialBusy, setSocialBusy] = useState(false);
+  const [showReport, setShowReport] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -180,13 +182,29 @@ export default function StageDetail() {
           >
             <Star size={15} className={favorited ? 'fill-current' : ''} />
           </button>
-          {isOwner && (
+          {isOwner ? (
             <button onClick={() => navigate(`/stages/${id}/edit`)} className="btn-ghost">
               <Pencil size={14} /> Editar
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowReport(true)}
+              title="Denunciar este tramo"
+              className="inline-flex items-center px-3 py-2 border border-ink/20 text-ink/40 text-sm
+                         hover:border-rally hover:text-rally transition-colors"
+            >
+              <Flag size={15} />
             </button>
           )}
         </div>
       </header>
+
+      {showReport && (
+        <ReportDialog
+          target={{ type: 'stage', id: stage.id, label: `Tramo: ${stage.name}` }}
+          onClose={() => setShowReport(false)}
+        />
+      )}
 
       {/* Métricas del tramo */}
       <section className="grid grid-cols-2 md:grid-cols-5 gap-px bg-ink/10 mb-8">

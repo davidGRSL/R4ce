@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import {
   Radar, Play, Square, MapPin, Volume2, VolumeX, Trophy, User,
-  Flag, TimerReset, CheckCircle2, XCircle, Navigation, Save, CloudOff, History,
+  Flag, TimerReset, CheckCircle2, XCircle, Navigation, Save, CloudOff, History, Gauge,
+  TriangleAlert,
 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { distanceM, formatDistance, speedKmh } from '../lib/geo.js';
@@ -44,6 +45,17 @@ export default function Live() {
   const [voiceOn, setVoiceOn]   = useState(getVoiceEnabled());
   const [resumeRun, setResumeRun] = useState(null);   // carrera guardada para reanudar
   const [pendingCount, setPendingCount] = useState(0); // tiempos en cola offline
+  // Aviso de seguridad vial: bloqueante hasta aceptarlo (requisito stores)
+  const [safetyAccepted, setSafetyAccepted] = useState(
+    () => localStorage.getItem('r4ce:safetyAccepted:v1') === 'true'
+  );
+
+  function acceptSafety() {
+    localStorage.setItem('r4ce:safetyAccepted:v1', 'true');
+    setSafetyAccepted(true);
+    // Registro en backend (best-effort; el bloqueo local ya está resuelto)
+    api.post('/profile/accept-safety').catch(() => {});
+  }
 
   // ── refs para leer estado fresco dentro del callback del GPS ──
   const phaseRef     = useRef(phase);
@@ -508,11 +520,46 @@ export default function Live() {
 
   return (
     <div className="max-w-xl mx-auto p-4 pb-24 md:pb-8 space-y-4">
+      {/* Aviso de seguridad vial — bloqueante la primera vez */}
+      {!safetyAccepted && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-carbon/80">
+          <div className="bg-paper border-t-4 border-rally max-w-sm w-full p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <TriangleAlert size={20} className="text-rally" />
+              <h2 className="font-display text-xl font-bold">Seguridad primero</h2>
+            </div>
+            <div className="text-sm text-ink/70 space-y-2">
+              <p>El modo Live es <strong>exclusivamente</strong> para:</p>
+              <ul className="list-disc pl-5 space-y-1 text-xs">
+                <li>Circuitos cerrados, vías privadas o eventos autorizados.</li>
+                <li>Nunca en vías públicas abiertas al tráfico.</li>
+              </ul>
+              <p>
+                El conductor <strong>no manipula el móvil</strong> en marcha: lo maneja
+                el copiloto o se usa con el vehículo detenido. Eres el único responsable
+                del uso de la app.
+              </p>
+            </div>
+            <button onClick={acceptSafety} className="btn w-full justify-center py-3">
+              Lo entiendo y acepto
+            </button>
+            <Link to="/legal/terminos" target="_blank"
+              className="block text-center text-[10px] font-mono uppercase tracking-widest text-ink/40 underline">
+              Ver términos de uso
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Cabecera + ajustes */}
       <div className="flex items-center justify-between">
         <div>
           <p className="eyebrow">Modo Live</p>
           <h1 className="text-2xl font-bold font-display">Cronometraje GPS</h1>
+          {/* Recordatorio permanente (requisito de seguridad vial) */}
+          <p className="text-[10px] font-mono uppercase tracking-widest text-rally/70 mt-1 flex items-center gap-1">
+            <TriangleAlert size={10} /> Solo circuito cerrado · el copiloto maneja el móvil
+          </p>
         </div>
         <div className="flex gap-2">
           <button
@@ -719,6 +766,7 @@ export default function Live() {
           splits={splits}
           reference={reference}
           elapsed={elapsed}
+          maxSpeed={maxSpeedRef.current}
           saveState={saveState}
           visibility={visibility}
           setVisibility={setVisibility}
@@ -804,7 +852,7 @@ function CheckpointList({ stage, splits, reference, live = false, nextCp = 0 }) 
 // Panel de resultados finales
 // ─────────────────────────────────────────────
 function FinishedPanel({
-  stage, splits, reference, elapsed,
+  stage, splits, reference, elapsed, maxSpeed,
   saveState, visibility, setVisibility, onSave, onRestart, onExit,
 }) {
   const totalMs = splits[splits.length - 1]?.ms ?? elapsed;
@@ -823,6 +871,11 @@ function FinishedPanel({
           </p>
         ) : (
           <p className="text-sm text-white/70 mt-2">Primer tiempo registrado en este tramo</p>
+        )}
+        {maxSpeed > 0 && (
+          <p className="inline-flex items-center gap-2 font-mono text-sm text-white/80 mt-3 px-3 py-1.5 bg-white/10">
+            <Gauge size={15} /> Vel. máxima {Math.round(maxSpeed * 10) / 10} km/h
+          </p>
         )}
       </div>
 

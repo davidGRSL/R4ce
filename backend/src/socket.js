@@ -48,6 +48,9 @@ export function initSocket(httpServer) {
   });
 
   io.on('connection', (socket) => {
+    // Room personal: para notificaciones dirigidas a este usuario
+    socket.join(`user_${socket.user.id}`);
+
     // Unirse a la room de un grupo (solo miembros)
     socket.on('group:join', async (groupId, ack) => {
       try {
@@ -98,4 +101,9 @@ export function getIO() {
 /** Emite un evento a la room de un grupo. No falla si io no está listo. */
 export function emitToGroup(groupId, event, payload) {
   if (io) io.to(`group_${groupId}`).emit(event, payload);
+}
+
+/** Emite un evento a todas las sesiones de un usuario concreto. */
+export function emitToUser(userId, event, payload) {
+  if (io) io.to(`user_${userId}`).emit(event, payload);
 }

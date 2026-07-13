@@ -12,7 +12,12 @@ import timeRoutes from './routes/timeRoutes.js';
 import groupRoutes from './routes/groupRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
 import vehicleRoutes from './routes/vehicleRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
+import reportRoutes from './routes/reportRoutes.js';
+import userRoutes from './routes/userRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
 import { initSocket } from './socket.js';
+import { query } from './db/pool.js';
 // Cargar variables de entorno
 dotenv.config();
 
@@ -73,6 +78,10 @@ app.use('/api/v1/times', timeRoutes);
 app.use('/api/v1/groups', groupRoutes);
 app.use('/api/v1/profile', profileRoutes);
 app.use('/api/v1/vehicles', vehicleRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
+app.use('/api/v1/reports', reportRoutes);
+app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/admin', adminRoutes);
 app.get('/api/v1/ping', (req, res) => {
   res.json({ message: 'pong', timestamp: new Date().toISOString() });
 });
@@ -107,6 +116,25 @@ httpServer.listen(PORT, '0.0.0.0', async () => {
   console.log(`   WebSocket activo en wss://localhost:${PORT}/socket.io`);
   console.log('');
   await testConnection();
+
+  // Bootstrap de administradores: los usernames de ADMIN_USERNAMES
+  // reciben rol admin al arrancar (para el primer admin; después se
+  // gestionan desde el panel /admin).
+  const adminNames = (process.env.ADMIN_USERNAMES || '')
+    .split(',').map((u) => u.trim()).filter(Boolean);
+  if (adminNames.length > 0) {
+    try {
+      const result = await query(
+        `UPDATE users SET role = 'admin' WHERE username = ANY($1) AND role <> 'admin' RETURNING username`,
+        [adminNames]
+      );
+      if (result.rows.length > 0) {
+        console.log(`   Admins promovidos: ${result.rows.map((r) => r.username).join(', ')}`);
+      }
+    } catch (err) {
+      console.error('   [admin bootstrap] falló:', err.message);
+    }
+  }
 });
 
 // Graceful shutdown

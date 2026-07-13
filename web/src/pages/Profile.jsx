@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Camera, Trash2, Save, Loader2 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import Garage from '../components/Garage.jsx';
+import AccountSettings from '../components/AccountSettings.jsx';
 
 function formatBest(ms) {
   if (ms == null) return '—';
@@ -238,6 +239,12 @@ export default function Profile() {
           )}
         </div>
       </form>
+
+      {/* Cuenta: verificación de email, bloqueados y zona de peligro */}
+      <div className="mt-12 pt-12 border-t border-ink/10 max-w-xl">
+        <p className="eyebrow mb-4">Cuenta</p>
+        <AccountSettings profile={profile} />
+      </div>
     </div>
   );
 }

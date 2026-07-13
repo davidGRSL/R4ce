@@ -7,6 +7,10 @@ import Dashboard from './pages/Dashboard.jsx';
 import TimeDetail from './pages/TimeDetail.jsx';
 import Groups from './pages/Groups.jsx';
 import GroupDetail from './pages/GroupDetail.jsx';
+import Notifications from './pages/Notifications.jsx';
+import Admin from './pages/Admin.jsx';
+import VerifyEmail from './pages/VerifyEmail.jsx';
+import { Terms, Privacy } from './pages/Legal.jsx';
 import Stages from './pages/Stages.jsx';
 import StageCreate from './pages/StageCreate.jsx';
 import StageDetail from './pages/StageDetail.jsx';
@@ -18,6 +22,11 @@ export default function App() {
     <Routes>
       <Route path="/login"    element={<Login />} />
       <Route path="/register" element={<Register />} />
+
+      {/* Públicas: legales (URL para las fichas de stores) y verificación de email */}
+      <Route path="/legal/terminos"   element={<Terms />} />
+      <Route path="/legal/privacidad" element={<Privacy />} />
+      <Route path="/verify"           element={<VerifyEmail />} />
 
       <Route
         element={
@@ -36,6 +45,8 @@ export default function App() {
         <Route path="rankings"        element={<Navigate to="/stages?tab=rankings" replace />} />
         <Route path="groups"          element={<Groups />} />
         <Route path="groups/:id"      element={<GroupDetail />} />
+        <Route path="notifications"   element={<Notifications />} />
+        <Route path="admin"           element={<Admin />} />
         <Route path="times/:id"       element={<TimeDetail />} />
         <Route path="profile"         element={<Profile />} />
       </Route>

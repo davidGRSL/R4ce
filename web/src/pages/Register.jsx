@@ -10,8 +10,10 @@ export default function Register() {
   const navigate = useNavigate();
   const [username,   setUsername]   = useState('');
   const [pseudonym,  setPseudonym]  = useState('');
+  const [email,      setEmail]      = useState('');
   const [password,   setPassword]   = useState('');
   const [confirm,    setConfirm]    = useState('');
+  const [tosAccepted, setTosAccepted] = useState(false);
   const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState('');
 
@@ -29,6 +31,8 @@ export default function Register() {
     if (password.length > 72) return 'La contraseña no puede superar 72 caracteres.';
     if (password !== confirm) return 'Las contraseñas no coinciden.';
     if (pseudonym.length > 50) return 'El nombre público no puede superar 50 caracteres.';
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) return 'El email no es válido.';
+    if (!tosAccepted) return 'Debes aceptar los términos de uso y la política de privacidad.';
     return null;
   }
 
@@ -44,8 +48,9 @@ export default function Register() {
 
     setLoading(true);
     try {
-      const body = { username: username.trim(), password };
+      const body = { username: username.trim(), password, tosAccepted };
       if (pseudonym.trim()) body.pseudonym = pseudonym.trim();
+      if (email.trim())     body.email = email.trim();
 
       // El backend registra y auto-inicia sesión: devuelve
       // { user, accessToken, refreshToken } igual que /auth/login.
@@ -169,6 +174,42 @@ export default function Register() {
                 required
               />
             </div>
+
+            <div>
+              <label className="label" htmlFor="email">
+                Email <span className="text-ink/40 normal-case">(recomendado)</span>
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="input"
+                placeholder="tu@email.com"
+                autoComplete="email"
+              />
+              <p className="text-[11px] text-ink/40 font-mono mt-1">
+                Solo guardamos un hash, nunca tu dirección. Sirve para verificar
+                la cuenta y publicar contenido público.
+              </p>
+            </div>
+
+            <label className="flex items-start gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={tosAccepted}
+                onChange={(e) => setTosAccepted(e.target.checked)}
+                className="mt-0.5 accent-[#e63946]"
+                required
+              />
+              <span className="text-xs text-ink/60">
+                He leído y acepto los{' '}
+                <Link to="/legal/terminos" target="_blank" className="text-rally hover:underline">términos de uso</Link>
+                {' '}y la{' '}
+                <Link to="/legal/privacidad" target="_blank" className="text-rally hover:underline">política de privacidad</Link>,
+                incluida la tolerancia cero con el contenido abusivo.
+              </span>
+            </label>
           </div>
 
           {error && (
