@@ -43,6 +43,24 @@ npx cap open ios
 En el Mac, además: `sudo gem install cocoapods` y `pod install` dentro de
 `web/ios/App` la primera vez.
 
+## ⚠ Ajustes de DESARROLLO que hay que revertir antes de publicar
+
+En `capacitor.config.json`:
+
+```json
+"server": { "androidScheme": "http" },   // ← en producción: "https"
+"android": { "allowMixedContent": true } // ← en producción: quitar
+```
+
+Motivo: con `androidScheme: https` la app se sirve desde `https://localhost` y
+el WebView BLOQUEA las llamadas a un backend `http://` (mixed content), sin que
+la petición llegue siquiera a salir del dispositivo. Con backend HTTPS real
+(dominio o túnel) se restauran ambos valores. `http://localhost` sigue siendo
+contexto seguro en Chromium, así que GPS y micrófono funcionan igual.
+
+También es de desarrollo `res/xml/network_security_config.xml` (permite HTTP
+contra la IP del PC) — ver comentario dentro del archivo.
+
 ## URL del backend
 
 La app nativa NO puede usar el proxy de Vite: necesita la URL real del API.
@@ -74,7 +92,15 @@ npm run cap:assets
 ## Push nativo (FCM — Android e iOS)
 
 Sin configurar, el push está desactivado y todo lo demás funciona (socket +
-notificaciones del navegador). Para activarlo:
+notificaciones del navegador).
+
+⚠ El registro de push está detrás del flag `VITE_ENABLE_PUSH`. Es obligatorio:
+si se llama a `PushNotifications.register()` sin `google-services.json`, la app
+**crashea al arrancar** con `Default FirebaseApp is not initialized` (es un
+fallo nativo, un try/catch de JS no lo evita). Una vez configurado Firebase,
+compila con `$env:VITE_ENABLE_PUSH = "true"`.
+
+Para activarlo:
 
 1. Crea un proyecto en [Firebase Console](https://console.firebase.google.com).
 2. Añade una app Android con id `com.r4ce.app` → descarga `google-services.json`

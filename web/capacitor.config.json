@@ -3,7 +3,10 @@
   "appName": "R4ce",
   "webDir": "dist",
   "server": {
-    "androidScheme": "https"
+    "androidScheme": "http"
+  },
+  "android": {
+    "allowMixedContent": true
   },
   "plugins": {
     "SplashScreen": {

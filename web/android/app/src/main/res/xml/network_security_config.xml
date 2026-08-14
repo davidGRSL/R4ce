@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Solo para PRUEBAS EN RED LOCAL: permite HTTP sin cifrar contra el PC de
+  desarrollo. El resto de tráfico sigue exigiendo HTTPS.
+
+  ⚠ ANTES DE PUBLICAR EN GOOGLE PLAY: quitar android:networkSecurityConfig
+  del <application> en AndroidManifest.xml (o vaciar este archivo). En
+  producción el backend debe ir por HTTPS con dominio propio.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- IP del PC de desarrollo (ipconfig → IPv4) -->
+        <domain includeSubdomains="false">192.168.1.42</domain>
+        <!-- Emulador de Android: el host se ve como 10.0.2.2 -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

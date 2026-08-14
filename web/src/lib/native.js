@@ -91,8 +91,15 @@ export async function allowScreenOff() {
 // ─────────────────────────────────────────────
 let pushListenersReady = false;
 
+// El push solo se activa si Firebase está configurado en el proyecto nativo
+// (google-services.json / GoogleService-Info.plist). Sin él, llamar a
+// PushNotifications.register() CRASHEA la app a nivel nativo:
+// "Default FirebaseApp is not initialized" — y un try/catch de JS no lo evita.
+// Activar con VITE_ENABLE_PUSH=true en el build cuando Firebase esté listo.
+const PUSH_ENABLED = import.meta.env.VITE_ENABLE_PUSH === 'true';
+
 export async function registerPush(onNotificationTap) {
-  if (!isNative) return false;
+  if (!isNative || !PUSH_ENABLED) return false;
 
   try {
     let perm = await PushNotifications.checkPermissions();

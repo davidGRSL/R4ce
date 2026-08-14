@@ -26,7 +26,14 @@ let io = null;
 export function initSocket(httpServer) {
   io = new SocketIOServer(httpServer, {
     cors: {
-      origin: [process.env.WEB_URL, process.env.MOBILE_URL].filter(Boolean),
+      // Mismos orígenes que el CORS HTTP (ver app.js): web + app nativa
+      origin: [
+        ...(process.env.WEB_URL || '').split(','),
+        ...(process.env.MOBILE_URL || '').split(','),
+        'https://localhost',
+        'capacitor://localhost',
+        'http://localhost',
+      ].map((o) => o.trim()).filter(Boolean),
       methods: ['GET', 'POST'],
       credentials: true,
     },

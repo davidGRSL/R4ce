@@ -36,10 +36,26 @@ app.set('trust proxy', 1);
 // Socket.io (auth JWT + rooms de grupo) — ver src/socket.js
 const io = initSocket(httpServer);
 
+// Orígenes permitidos (CORS). Además de WEB_URL/MOBILE_URL (que admiten
+// varios valores separados por comas), se permiten siempre los orígenes de
+// la app nativa Capacitor: Android usa https://localhost y iOS
+// capacitor://localhost. Las peticiones sin Origin (curl, apps nativas que
+// no lo envían) también pasan.
+const allowedOrigins = [
+  ...(process.env.WEB_URL || '').split(','),
+  ...(process.env.MOBILE_URL || '').split(','),
+  'https://localhost',
+  'capacitor://localhost',
+  'http://localhost',
+].map((o) => o.trim()).filter(Boolean);
+
 // Middleware de seguridad y parseo
 app.use(helmet());
 app.use(cors({
-  origin: [process.env.WEB_URL, process.env.MOBILE_URL],
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+    return cb(new Error(`Origen no permitido por CORS: ${origin}`));
+  },
   credentials: true,
 }));
 app.use(express.json());
