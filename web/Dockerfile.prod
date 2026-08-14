@@ -1,0 +1,25 @@
+# syntax=docker/dockerfile:1
+# ─────────────────────────────────────────────
+# Imagen de producción del frontend:
+#   1. Compila la SPA con Vite
+#   2. La sirve con Caddy, que además hace de reverse proxy del backend
+#      y gestiona el certificado HTTPS automáticamente (Let's Encrypt).
+#
+# Al servirse web y API bajo el MISMO dominio, el frontend usa rutas
+# relativas (/api/v1) y no necesita VITE_API_URL. La app nativa sí la
+# necesita en su build (ver docs/PUBLICAR-ANDROID.md).
+# ─────────────────────────────────────────────
+
+FROM node:20-alpine AS build
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+# ── Servidor ──
+FROM caddy:2-alpine
+COPY --from=build /app/dist /srv
+COPY Caddyfile /etc/caddy/Caddyfile

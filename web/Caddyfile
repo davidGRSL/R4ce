@@ -1,0 +1,49 @@
+# Caddy: HTTPS automático (Let's Encrypt) + SPA + reverse proxy del backend.
+# El dominio y el email de aviso llegan por variables de entorno del contenedor.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Cabeceras de seguridad
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# API REST
+	handle /api/* {
+		reverse_proxy backend:3000
+	}
+
+	# WebSocket del chat (Socket.io)
+	handle /socket.io/* {
+		reverse_proxy backend:3000
+	}
+
+	# Archivos subidos con STORAGE_DRIVER=local.
+	# Con R2 estas URLs son absolutas y no pasan por aquí.
+	handle /uploads/* {
+		reverse_proxy backend:3000
+	}
+
+	handle /health {
+		reverse_proxy backend:3000
+	}
+
+	# SPA: cualquier otra ruta la resuelve React Router
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+
+		# Los assets con hash en el nombre se pueden cachear para siempre
+		@hashed path /assets/*
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
+	}
+}

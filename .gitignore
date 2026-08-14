@@ -3,6 +3,17 @@
 .env.*
 !.env.example
 !**/.env.example
+!.env.production.example
+
+# Firma de la app Android — PERDERLA = no poder actualizar nunca la app.
+# Guardar el keystore en un gestor de contraseñas + copia offline.
+*.keystore
+*.jks
+key.properties
+
+# Credenciales de Firebase (push nativo)
+google-services.json
+GoogleService-Info.plist
 
 # Node
 node_modules/

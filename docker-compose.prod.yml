@@ -1,0 +1,132 @@
+# ═══════════════════════════════════════════════
+# Stack de PRODUCCIÓN (VPS). Diferencias con docker-compose.yml (desarrollo):
+#   - Postgres y Redis NO exponen puertos al exterior: solo red interna.
+#   - Backend sin bind mount ni nodemon: código de la imagen, `npm start`.
+#   - Caddy delante: HTTPS automático + SPA + proxy al backend.
+#   - restart: unless-stopped en todo.
+#
+# Uso:
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+# Guía completa: docs/DESPLIEGUE-VPS.md
+# ═══════════════════════════════════════════════
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: r4ce-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Solo se ejecuta al crear el volumen por primera vez
+      - ./backend/src/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - r4ce
+
+  redis:
+    image: redis:7-alpine
+    container_name: r4ce-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - r4ce
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: r4ce-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ACCESS_EXPIRES: ${JWT_ACCESS_EXPIRES:-1h}
+      JWT_REFRESH_EXPIRES_DAYS: ${JWT_REFRESH_EXPIRES_DAYS:-30}
+      CHAT_MASTER_KEY: ${CHAT_MASTER_KEY}
+      # CORS: dominio web + orígenes de la app nativa (Capacitor)
+      WEB_URL: https://${DOMAIN}
+      MOBILE_URL: ${MOBILE_URL:-}
+      ADMIN_USERNAMES: ${ADMIN_USERNAMES:-}
+      TOS_VERSION: ${TOS_VERSION:-2026-07-11}
+      REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-true}
+      # Almacenamiento: r2 en producción (ver .env.production.example)
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-r2}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
+      UPLOAD_DIR: /app/uploads
+      # Email (verificación de cuenta)
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      # Push nativo (opcional)
+      FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
+    volumes:
+      # Solo se usa con STORAGE_DRIVER=local; inofensivo con r2
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - r4ce
+
+  # Frontend (SPA compilada) + HTTPS + reverse proxy
+  caddy:
+    build:
+      context: ./web
+      dockerfile: Dockerfile.prod
+    container_name: r4ce-caddy
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    volumes:
+      - caddy_data:/data      # certificados: NO borrar (rate limits de Let's Encrypt)
+      - caddy_config:/config
+    depends_on:
+      - backend
+    networks:
+      - r4ce
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  r4ce:
+    driver: bridge
