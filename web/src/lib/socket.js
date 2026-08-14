@@ -7,12 +7,14 @@
  */
 import { io } from 'socket.io-client';
 import { getAccessToken } from './auth.js';
+import { API_ORIGIN } from './api.js';
 
 let socket = null;
 
 export function getSocket() {
   if (!socket) {
-    socket = io('/', {
+    // Web dev: mismo origen (proxy de Vite). App nativa: VITE_API_URL.
+    socket = io(API_ORIGIN || '/', {
       autoConnect: false,
       transports: ['websocket', 'polling'],
       auth: (cb) => cb({ token: getAccessToken() }),

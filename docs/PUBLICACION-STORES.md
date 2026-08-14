@@ -49,20 +49,20 @@ Leyenda: ✅ hecho · 🔶 parcial · ❌ pendiente
 
 ## Bloque B — Conversión a app nativa (Capacitor)
 
-### B1. Montaje base ❌
+### B1. Montaje base ✅ (proyectos en web/android y web/ios — ver docs/CAPACITOR.md)
 - [ ] `npm i @capacitor/core @capacitor/cli` + `npx cap init` + plataformas `ios`/`android` (carpeta `/app` o dentro de `/web`)
 - [ ] `VITE_API_URL` real: `lib/api.js` usa baseURL relativa (`/api/v1`, válida con proxy de Vite) — hacerla configurable para que la app nativa apunte al dominio de producción. Igual para Socket.io (`lib/socket.js` conecta a `/`)
 - [ ] Iconos + splash screens (`@capacitor/assets`)
 - [ ] Safe areas iOS (notch) en Layout/Live/chat
 
-### B2. Plugins nativos (el "valor nativo" que pide Apple 4.2) ❌
+### B2. Plugins nativos (el "valor nativo" que pide Apple 4.2) ✅ (sin background location por diseño: keep-awake; push requiere configurar Firebase)
 - [ ] `@capacitor/geolocation` + background: Live debe seguir cronometrando con pantalla apagada (lo que la web no puede — ver persistencia en `lib/liveSession.js`, que se mantiene como red de seguridad)
 - [ ] `@capacitor/push-notifications` (FCM + APNs): las notificaciones (grupo/récord/noticias) deben llegar con la app cerrada. Backend: tabla `push_tokens`, registro de token por dispositivo y envío desde `utils/notify.js` además del socket
 - [ ] Micrófono para notas de voz: MediaRecorder funciona en WebView, verificar permisos nativos; si falla en iOS, plugin de grabación
 - [ ] `@capacitor-community/keep-awake` sustituye al Wake Lock API
 - [ ] Deep links (`r4ce://` + App Links/Universal Links) para notificaciones → pantalla correcta
 
-### B3. Declaración de permisos ❌
+### B3. Declaración de permisos ✅ (Manifest/Info.plist parcheados; sin ACCESS_BACKGROUND_LOCATION)
 - [ ] iOS `Info.plist`: `NSLocationWhenInUseUsageDescription`, `NSLocationAlwaysAndWhenInUseUsageDescription`, `NSMicrophoneUsageDescription`, `NSCameraUsageDescription` (si se saca foto directa) — textos claros de por qué
 - [ ] Android `AndroidManifest.xml`: `ACCESS_FINE_LOCATION`, `ACCESS_BACKGROUND_LOCATION` (requiere declaración especial + vídeo demo en Play Console), `RECORD_AUDIO`, `POST_NOTIFICATIONS`
 - [ ] Pedir permisos en contexto (al activar Live / al grabar), nunca en el arranque

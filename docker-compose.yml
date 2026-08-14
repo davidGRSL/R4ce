@@ -65,6 +65,9 @@ services:
       TOS_VERSION: ${TOS_VERSION:-2026-07-11}
       # true → publicar tramos/tiempos públicos exige email verificado
       REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-false}
+      # Push nativo (app Capacitor): JSON del service account de Firebase.
+      # Vacío = push desactivado (todo lo demás funciona igual).
+      FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
       SMTP_USER: ${SMTP_USER}

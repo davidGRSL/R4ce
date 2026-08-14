@@ -77,6 +77,17 @@ model-viewer {
 }
 
 /* ─────────────────────────────────────────────
+   Safe areas (app nativa: notch iOS / cámara Android)
+   En navegadores de escritorio env() vale 0 y no afecta.
+   La barra inferior móvil ya usa pb-[env(safe-area-inset-bottom)].
+   ───────────────────────────────────────────── */
+body {
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* ─────────────────────────────────────────────
    Visor de trazada (SilhouetteViewer)
    Ocultación de marcadores por CSS. Doble selector:
    - [data-part=…]  → siluetas nuevas (silhouette.js las agrupa)

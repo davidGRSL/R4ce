@@ -17,6 +17,7 @@ import {
   saveRun, loadRun, clearRun,
   queueTime, flushPendingTimes, pendingTimesCount,
 } from '../lib/liveSession.js';
+import { watchPosition, keepScreenOn, allowScreenOff } from '../lib/native.js';
 
 // ── Radios de disparo (metros) ────────────────────────────
 const NOTIFY_DIST   = 500;  // avisar de tramo cercano
@@ -69,8 +70,7 @@ export default function Live() {
   const notifiedRef  = useRef(new Set()); // tramos ya avisados
   const dismissedRef = useRef(new Set()); // tramos descartados por el usuario
   const lastQueryRef = useRef({ t: 0, coord: null });
-  const watchIdRef   = useRef(null);
-  const wakeLockRef  = useRef(null);
+  const watchIdRef   = useRef(null); // función stop() del watch GPS activo
   const voiceRef     = useRef(voiceOn);
   const saveStateRef = useRef('pending');
   const lastPersistRef = useRef(0);
@@ -97,12 +97,13 @@ export default function Live() {
 
   const say = useCallback((text) => { if (voiceRef.current) speak(text); }, []);
 
-  // ── Wake lock: pantalla encendida durante el crono ──
+  // ── Pantalla encendida durante el crono ──
+  // Web: Wake Lock API · App nativa: plugin keep-awake (ver lib/native.js)
   async function acquireWakeLock() {
-    try { wakeLockRef.current = await navigator.wakeLock?.request('screen'); } catch { /* opcional */ }
+    await keepScreenOn();
   }
   function releaseWakeLock() {
-    try { wakeLockRef.current?.release(); wakeLockRef.current = null; } catch { /* — */ }
+    allowScreenOff();
   }
 
   // ── Notificación de tramo cercano ──
@@ -274,19 +275,16 @@ export default function Live() {
   }
 
   // ── Arrancar / parar la vigilancia GPS ──
+  // watchPosition (lib/native.js) unifica web y app nativa; el permiso de
+  // ubicación se pide aquí, en contexto — nunca al arrancar la app.
   async function startWatch() {
-    if (!navigator.geolocation) {
-      setGpsError('Este dispositivo no tiene GPS disponible en el navegador.');
-      return false;
-    }
-    try { await Notification.requestPermission(); } catch { /* opcional */ }
+    try { await Notification.requestPermission(); } catch { /* opcional (no existe en WebView) */ }
     await acquireWakeLock();
 
-    if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current);
-    watchIdRef.current = navigator.geolocation.watchPosition(
+    if (watchIdRef.current) { watchIdRef.current(); watchIdRef.current = null; }
+    watchIdRef.current = await watchPosition(
       onPosition,
-      (err) => setGpsError(err.message || 'No se pudo obtener la posición GPS'),
-      { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
+      (err) => setGpsError(err.message || 'No se pudo obtener la posición GPS')
     );
     return true;
   }
@@ -298,7 +296,7 @@ export default function Live() {
   }
 
   function stopEverything() {
-    if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current);
+    watchIdRef.current?.(); // detener el watch GPS (web o nativo)
     watchIdRef.current = null;
     releaseWakeLock();
     clearRun(); // participación descartada a propósito: no ofrecer reanudar
@@ -311,7 +309,7 @@ export default function Live() {
   }
 
   useEffect(() => () => { // limpieza al salir de la página
-    if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current);
+    watchIdRef.current?.();
     releaseWakeLock();
     window.speechSynthesis?.cancel();
   }, []);

@@ -17,6 +17,14 @@
  */
 import { query } from '../db/pool.js';
 import { emitToUser } from '../socket.js';
+import { sendPushToUser } from './push.js';
+
+// Ruta de destino al tocar la notificación (deep link en la app nativa)
+function routeFor(type, data) {
+  if (type === 'group_message' && data?.groupId) return `/groups/${data.groupId}`;
+  if (type === 'record' && data?.stageId)        return `/stages/${data.stageId}`;
+  return '/notifications';
+}
 
 export function publicNotification(row) {
   return {
@@ -40,6 +48,8 @@ export async function createNotification({ userId, type, title, body = null, dat
   );
   const notif = publicNotification(result.rows[0]);
   emitToUser(userId, 'notification:new', notif);
+  // Push nativo (no-op sin FIREBASE_SERVICE_ACCOUNT)
+  sendPushToUser(userId, { title, body, route: routeFor(type, data) }).catch(() => {});
   return notif;
 }
 
@@ -91,6 +101,11 @@ export async function notifyGroupMessage({ groupId, senderId, senderPseudonym })
       }
 
       emitToUser(user_id, 'notification:new', publicNotification(row));
+      sendPushToUser(user_id, {
+        title: row.title,
+        body: row.body,
+        route: `/groups/${groupId}`,
+      }).catch(() => {});
     } catch (err) {
       console.error('  [notify] group_message falló para', user_id, err.message);
     }
@@ -156,6 +171,7 @@ export async function broadcastNews({ title, body = null, url = null }) {
   );
   for (const row of result.rows) {
     emitToUser(row.user_id, 'notification:new', publicNotification(row));
+    sendPushToUser(row.user_id, { title, body, route: '/notifications' }).catch(() => {});
   }
   return result.rows.length;
 }

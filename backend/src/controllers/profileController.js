@@ -168,6 +168,49 @@ export async function acceptSafety(req, res) {
 }
 
 // ─────────────────────────────────────────────
+// POST /api/v1/profile/push-token
+// body: { token, platform } — registra el dispositivo para push nativo.
+// Si el token ya existía (reinstalación / cambio de cuenta), se reasigna.
+// ─────────────────────────────────────────────
+export async function registerPushToken(req, res) {
+  const { token, platform } = req.body || {};
+
+  if (typeof token !== 'string' || token.length < 10) {
+    return res.status(400).json({ error: { message: 'token inválido', status: 400 } });
+  }
+  const plat = ['android', 'ios'].includes(platform) ? platform : 'android';
+
+  try {
+    await query(
+      `INSERT INTO push_tokens (user_id, token, platform)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (token) DO UPDATE SET user_id = $1, platform = $3`,
+      [req.user.id, token, plat]
+    );
+    return res.status(204).send();
+  } catch (err) {
+    console.error('Error en registerPushToken:', err);
+    return res.status(500).json({ error: { message: 'Error interno', status: 500 } });
+  }
+}
+
+// ─────────────────────────────────────────────
+// DELETE /api/v1/profile/push-token
+// body: { token } — al cerrar sesión en el dispositivo.
+// ─────────────────────────────────────────────
+export async function removePushToken(req, res) {
+  const { token } = req.body || {};
+  if (typeof token === 'string' && token.length > 0) {
+    try {
+      await query(`DELETE FROM push_tokens WHERE token = $1 AND user_id = $2`, [token, req.user.id]);
+    } catch (err) {
+      console.error('Error en removePushToken:', err);
+    }
+  }
+  return res.status(204).send();
+}
+
+// ─────────────────────────────────────────────
 // DELETE /api/v1/profile
 // body: { password } — borrado de cuenta (requisito de stores).
 // Elimina la media del storage y luego la fila de users (el resto de

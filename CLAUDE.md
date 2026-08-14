@@ -65,7 +65,9 @@ Nota chat: el envío persiste por REST (`POST /groups/:id/messages[/media]`) y e
 
 También implementado: **notificaciones** (tabla + `utils/notify.js`, rooms `user_<id>`, página Avisos con badge; migración 003), **Bloque A de stores completo** (migración 004): roles globales admin/user/premium (`requireRole`, bootstrap desde `ADMIN_USERNAMES`, panel `/admin` con cola de denuncias + gestión de roles + difusión de noticias), denuncias UGC (`POST /reports`), bloqueo entre usuarios (filtra chat/rankings/descubrir), borrado de cuenta (`DELETE /profile` + media), legales públicos (`/legal/terminos|privacidad` — BORRADOR pendiente de abogado), aceptación de ToS con versión (`TOS_VERSION`), verificación de email (nodemailer fail-soft: sin SMTP loguea el enlace; gate opcional `REQUIRE_EMAIL_VERIFICATION`), aviso de seguridad vial en Live.
 
-Pendiente (ver docs/ROADMAP.md y docs/PUBLICACION-STORES.md): comentarios en tramos (fase 2 social, diseño decidido), Capacitor + push nativo (Bloque B), producción (Bloque C), app móvil nativa, vista `user_stats` con cálculo de km incorrecto (usar `ST_Length(geography(route_line))`).
+**Capacitor (Bloque B) hecho**: proyectos nativos en `web/android` y `web/ios` (permisos declarados, deep links `r4ce://`), capa `web/src/lib/native.js` (GPS/keep-awake/push/deep links con degradación a web — SIN background location por diseño), `VITE_API_URL` + `resolveMediaUrl` para apuntar al backend real, push FCM fail-soft (`utils/push.js`, tabla `push_tokens` migración 005, activar con `FIREBASE_SERVICE_ACCOUNT`). Guía de build/publicación en docs/CAPACITOR.md.
+
+Pendiente (ver docs/ROADMAP.md y docs/PUBLICACION-STORES.md): comentarios en tramos (fase 2 social, diseño decidido), producción (Bloque C), vista `user_stats` con cálculo de km incorrecto (usar `ST_Length(geography(route_line))`).
 
 ## Testing
 

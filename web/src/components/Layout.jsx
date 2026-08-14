@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { NavLink, useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { LogOut, LayoutGrid, UsersRound, Route as RouteIcon, Radar, User, Bell, ShieldAlert } from 'lucide-react';
-import { api } from '../lib/api.js';
+import { api, resolveMediaUrl } from '../lib/api.js';
 import { clearTokens, getRefreshToken, getUser } from '../lib/auth.js';
 import { getSocket, disconnectSocket } from '../lib/socket.js';
+import { registerPush, listenDeepLinks } from '../lib/native.js';
 
 export default function Layout() {
   const navigate = useNavigate();
@@ -34,6 +35,15 @@ export default function Layout() {
       setNeedsTos(false);
     } catch { /* reintento en la próxima carga */ }
   }
+
+  // ── App nativa: push (FCM/APNs) + deep links r4ce:// ──
+  // En web ambas funciones son no-op (ver lib/native.js).
+  useEffect(() => {
+    registerPush((route) => navigate(route));
+    const stopDeepLinks = listenDeepLinks((route) => navigate(route));
+    return stopDeepLinks;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Notificaciones: contador inicial + tiempo real por socket ──
   useEffect(() => {
@@ -97,7 +107,7 @@ export default function Layout() {
   ];
 
   const displayName = profile?.pseudonym || user?.pseudonym || user?.username || 'Piloto';
-  const avatarUrl   = profile?.avatarUrl || null;
+  const avatarUrl   = resolveMediaUrl(profile?.avatarUrl) || null;
   const initials    = displayName
     .split(' ')
     .map((w) => w[0])

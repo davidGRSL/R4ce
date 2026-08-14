@@ -5,7 +5,7 @@ import {
   X, Trash2, Copy, RefreshCw, Check, LogOut, Pencil, ChevronUp, Settings,
   Flag, ShieldOff,
 } from 'lucide-react';
-import { api } from '../lib/api.js';
+import { api, resolveMediaUrl } from '../lib/api.js';
 import { getSocket } from '../lib/socket.js';
 import { getUser } from '../lib/auth.js';
 import ReportDialog from '../components/ReportDialog.jsx';
@@ -367,7 +367,7 @@ function MessageBubble({ msg, own, compact, isBlocked, canDelete, onDelete, onRe
       <div className="w-8 shrink-0">
         {!compact && (
           msg.avatarUrl ? (
-            <img src={msg.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-ink/10" />
+            <img src={resolveMediaUrl(msg.avatarUrl)} alt="" className="w-8 h-8 rounded-full object-cover border border-ink/10" />
           ) : (
             <div className="w-8 h-8 rounded-full bg-rally/15 text-rally flex items-center justify-center text-[10px] font-bold font-mono">
               {initials}
@@ -395,15 +395,15 @@ function MessageBubble({ msg, own, compact, isBlocked, canDelete, onDelete, onRe
           ) : (
             <>
               {msg.mediaUrl && msg.messageType === 'image' && (
-                <a href={msg.mediaUrl} target="_blank" rel="noreferrer" className="block mb-1">
-                  <img src={msg.mediaUrl} alt="" className="max-h-64 w-auto object-contain" loading="lazy" />
+                <a href={resolveMediaUrl(msg.mediaUrl)} target="_blank" rel="noreferrer" className="block mb-1">
+                  <img src={resolveMediaUrl(msg.mediaUrl)} alt="" className="max-h-64 w-auto object-contain" loading="lazy" />
                 </a>
               )}
               {msg.mediaUrl && msg.messageType === 'video' && (
-                <video src={msg.mediaUrl} controls preload="metadata" className="max-h-64 w-full mb-1" />
+                <video src={resolveMediaUrl(msg.mediaUrl)} controls preload="metadata" className="max-h-64 w-full mb-1" />
               )}
               {msg.mediaUrl && msg.messageType === 'audio' && (
-                <audio src={msg.mediaUrl} controls preload="metadata" className="w-56 max-w-full mb-1" />
+                <audio src={resolveMediaUrl(msg.mediaUrl)} controls preload="metadata" className="w-56 max-w-full mb-1" />
               )}
               {msg.content && <p className="whitespace-pre-wrap">{msg.content}</p>}
             </>
